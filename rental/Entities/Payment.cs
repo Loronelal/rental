@@ -1,14 +1,22 @@
-﻿namespace rental.Entities
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+[Table("payments")]
+public class Payment
 {
-    public class Payment
-    {
-        public int Id { get; set; }
-        public int RentalId { get; set; }
-        public decimal Amount { get; set; }
-        public DateTime PaymentDate { get; set; } = DateTime.UtcNow;
-        public string Method { get; set; } = "карта";
+    [Column("id")]
+    public int Id { get; set; }
 
-        public Rental Rental { get; set; } = null!;
+    [Column("rental_id")]
+    public int RentalId { get; set; }
 
-    }
+    [Column("amount")]
+    public decimal Amount { get; set; }
+
+    [Column("payment_date")]
+    public DateTime PaymentDate { get; set; } = DateTime.UtcNow;
+
+    [Column("method")]
+    public string Method { get; set; } = "карта";
+
+    public Rental Rental { get; set; } = null!;
 }

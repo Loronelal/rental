@@ -1,16 +1,22 @@
-﻿namespace rental.Entities
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+[Table("damages")]
+public class Damage
 {
-    public class Damage
-    {
+    [Column("id")]
+    public int Id { get; set; }
 
-        public int Id { get; set; }
-        public int RentalId { get; set; }
-        public string Description { get; set; } = string.Empty;
-        public decimal RepairCost { get; set; }
-        public string Status { get; set; } = "зафиксировано";
+    [Column("rental_id")]
+    public int RentalId { get; set; }
 
-        public Rental Rental { get; set; } = null!;
+    [Column("description")]
+    public string Description { get; set; } = string.Empty;
 
+    [Column("repair_cost")]
+    public decimal RepairCost { get; set; }
 
-    }
+    [Column("status")]
+    public string Status { get; set; } = "зафиксировано";
+
+    public Rental Rental { get; set; } = null!;
 }

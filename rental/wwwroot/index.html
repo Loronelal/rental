@@ -1,0 +1,144 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Сервис аренды техники</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container mt-4">
+        <h1 class="mb-4">🚜 Сервис аренды техники</h1>
+
+        <!-- Навигация вкладками -->
+        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="clients-tab" data-bs-toggle="tab" data-bs-target="#clients" type="button" role="tab">Клиенты</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="equipment-tab" data-bs-toggle="tab" data-bs-target="#equipment" type="button" role="tab">Техника</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="rentals-tab" data-bs-toggle="tab" data-bs-target="#rentals" type="button" role="tab">Бронирования</button>
+            </li>
+        </ul>
+
+        <div class="tab-content mt-3">
+            <!-- Вкладка Клиенты -->
+            <div class="tab-pane fade show active" id="clients" role="tabpanel">
+                <div class="d-flex justify-content-between mb-3">
+                    <h3>Список клиентов</h3>
+                    <button class="btn btn-primary" onclick="showClientForm()"><i class="fas fa-plus"></i> Добавить клиента</button>
+                </div>
+                <div id="clientsList"></div>
+                <!-- Форма для клиента  -->
+                <div id="clientFormContainer" style="display:none;" class="card p-3 mt-3">
+                    <h5 id="clientFormTitle">Добавление клиента</h5>
+                    <form id="clientForm">
+                        <input type="hidden" id="clientId" value="0">
+                        <div class="mb-2">
+                            <label>Имя</label>
+                            <input type="text" id="clientName" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Телефон</label>
+                            <input type="text" id="clientPhone" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Email</label>
+                            <input type="email" id="clientEmail" class="form-control">
+                        </div>
+                        <div class="mb-2">
+                            <label>Паспортные данные</label>
+                            <input type="text" id="clientPassport" class="form-control">
+                        </div>
+                        <button type="submit" class="btn btn-success">Сохранить</button>
+                        <button type="button" class="btn btn-secondary" onclick="hideClientForm()">Отмена</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Вкладка Техника -->
+            <div class="tab-pane fade" id="equipment" role="tabpanel">
+                <div class="d-flex justify-content-between mb-3">
+                    <h3>Список техники</h3>
+                    <button class="btn btn-primary" onclick="showEquipmentForm()"><i class="fas fa-plus"></i> Добавить технику</button>
+                </div>
+                <div id="equipmentList"></div>
+                <!-- Форма для техники -->
+                <div id="equipmentFormContainer" style="display:none;" class="card p-3 mt-3">
+                    <h5 id="equipmentFormTitle">Добавление техники</h5>
+                    <form id="equipmentForm">
+                        <input type="hidden" id="equipmentId" value="0">
+                        <div class="mb-2">
+                            <label>Название</label>
+                            <input type="text" id="equipmentName" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Тип (ID)</label>
+                            <input type="number" id="equipmentTypeId" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Год выпуска</label>
+                            <input type="number" id="equipmentYear" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Стоимость аренды (час)</label>
+                            <input type="number" step="0.01" id="equipmentRate" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Статус</label>
+                            <select id="equipmentStatus" class="form-control">
+                                <option value="доступен">доступен</option>
+                                <option value="в аренде">в аренде</option>
+                                <option value="на обслуживании">на обслуживании</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-success">Сохранить</button>
+                        <button type="button" class="btn btn-secondary" onclick="hideEquipmentForm()">Отмена</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Вкладка Бронирования -->
+            <div class="tab-pane fade" id="rentals" role="tabpanel">
+                <div class="d-flex justify-content-between mb-3">
+                    <h3>Список бронирований</h3>
+                    <button class="btn btn-primary" onclick="showRentalForm()"><i class="fas fa-plus"></i> Создать бронирование</button>
+                </div>
+                <div id="rentalsList"></div>
+                <!-- Форма бронирования -->
+                <div id="rentalFormContainer" style="display:none;" class="card p-3 mt-3">
+                    <h5>Новое бронирование</h5>
+                    <form id="rentalForm">
+                        <div class="mb-2">
+                            <label>Клиент (ID)</label>
+                            <input type="number" id="rentalClientId" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Техника (ID)</label>
+                            <input type="number" id="rentalEquipmentId" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Дата начала</label>
+                            <input type="datetime-local" id="rentalStart" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Дата окончания</label>
+                            <input type="datetime-local" id="rentalEnd" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-success">Сохранить</button>
+                        <button type="button" class="btn btn-secondary" onclick="hideRentalForm()">Отмена</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

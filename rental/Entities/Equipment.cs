@@ -1,21 +1,29 @@
-﻿namespace rental.Entities
+﻿using rental.Entities;
+using System.ComponentModel.DataAnnotations.Schema;
+
+[Table("equipment")]
+public class Equipment
 {
-    public class Equipment
-    {
+    [Column("id")]
+    public int Id { get; set; }
 
-        public int Id { get; set; }
-        public string Name { get; set; } = string.Empty;
-        public int TypeId { get; set; }
-        public int Year { get; set; }
-        public decimal HourlyRate { get; set; }
-        public string Status { get; set; } = "доступен";
+    [Column("name")]      // если колонка есть
+    public string Name { get; set; } = string.Empty;
 
-        // ВК
-        public EquipmentType Type { get; set; } = null!;
+    [Column("type_id")]
+    public int TypeId { get; set; }
 
-        public ICollection<Rental> Rentals { get; set; } = new List<Rental>();
-        public EquipmentRating? Rating { get; set; }
-        public ICollection<Maintenance> Maintenances { get; set; } = new List<Maintenance>();
+    [Column("year")]
+    public int Year { get; set; }
 
-    }
+    [Column("hourly_rate")]
+    public decimal HourlyRate { get; set; }
+
+    [Column("status")]
+    public string Status { get; set; } = "доступен";
+
+    public EquipmentType Type { get; set; } = null!;
+    public ICollection<Rental> Rentals { get; set; } = new List<Rental>();
+    public EquipmentRating? Rating { get; set; }
+    public ICollection<Maintenance> Maintenances { get; set; } = new List<Maintenance>();
 }

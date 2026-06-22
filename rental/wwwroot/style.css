@@ -1,0 +1,15 @@
+﻿body {
+    background-color: #f8f9fa;
+}
+
+.card {
+    box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.15);
+}
+
+#clientsList .list-group-item,
+#equipmentList .list-group-item,
+#rentalsList .list-group-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}

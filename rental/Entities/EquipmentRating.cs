@@ -1,12 +1,16 @@
-﻿namespace rental.Entities
+﻿using System.ComponentModel.DataAnnotations.Schema;
+
+[Table("equipmentratings")]  
+public class EquipmentRating
 {
-    public class EquipmentRating
-    {
-        public int EquipmentId { get; set; }
-        public decimal AvgRating { get; set; }
-        public int RentalCount { get; set; }
+    [Column("equipment_id")]
+    public int EquipmentId { get; set; }
 
-        public Equipment Equipment { get; set; } = null!;
+    [Column("avg_rating")]
+    public decimal AvgRating { get; set; }
 
-    }
+    [Column("rental_count")]
+    public int RentalCount { get; set; }
+
+    public Equipment Equipment { get; set; } = null!;
 }
