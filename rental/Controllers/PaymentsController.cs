@@ -37,6 +37,26 @@ public class PaymentsController : ControllerBase
         return payment;
     }
 
+
+    [HttpGet("revenue")]
+    public async Task<ActionResult> GetRevenue([FromQuery] DateTime start, [FromQuery] DateTime end)
+    {
+        var revenue = await _context.Payments
+            .Where(p => p.PaymentDate >= start && p.PaymentDate <= end)
+            .Join(_context.Rentals, p => p.RentalId, r => r.Id, (p, r) => new { p, r })
+            .Join(_context.Equipment, pr => pr.r.EquipmentId, e => e.Id, (pr, e) => new { pr.p, pr.r, e })
+            .Join(_context.EquipmentTypes, pre => pre.e.TypeId, t => t.Id, (pre, t) => new { pre.p, pre.r, pre.e, t })
+            .GroupBy(x => x.t.Name)
+            .Select(g => new
+            {
+                Type = g.Key,
+                Total = g.Sum(x => x.p.Amount)
+            })
+            .ToListAsync();
+        return Ok(revenue);
+    }
+
+
     [HttpPost]
     public async Task<ActionResult<Payment>> PostPayment(Payment payment)
     {

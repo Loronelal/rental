@@ -20,6 +20,12 @@ namespace rental.Entities
         [Column("passport_data")]
         public string? PassportData { get; set; }
 
+        [Column("username")]
+        public string? Username { get; set; } = string.Empty;
+
+        [Column("password_hash")]
+        public string? PasswordHash { get; set; } = string.Empty;
+
         public ICollection<Rental> Rentals { get; set; } = new List<Rental>();
     }
 }

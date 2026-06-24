@@ -37,6 +37,19 @@ public class MaintenancesController : ControllerBase
         return maintenance;
     }
 
+    [HttpGet("overdue")]
+    public async Task<ActionResult<IEnumerable<Maintenance>>> GetOverdue()
+    {
+        var now = DateTime.Now;
+        var overdue = await _context.Maintenances
+            .Where(m => m.EndDate < now)
+            .Include(m => m.Equipment)
+            .Where(m => m.Equipment.Status == "на обслуживании")
+            .ToListAsync();
+        return Ok(overdue);
+    }
+
+
     [HttpPost]
     public async Task<ActionResult<Maintenance>> PostMaintenance(Maintenance maintenance)
     {
@@ -44,7 +57,6 @@ public class MaintenancesController : ControllerBase
         if (!equipmentExists)
             return BadRequest("Техника не найдена");
 
-        // Обновляем статус техники на "на обслуживании", если дата началась
         if (maintenance.StartDate <= DateTime.Now && maintenance.EndDate >= DateTime.Now)
         {
             var equipment = await _context.Equipment.FindAsync(maintenance.EquipmentId);

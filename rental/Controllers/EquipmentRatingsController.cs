@@ -58,4 +58,20 @@ public class EquipmentRatingsController : ControllerBase
 
         return NoContent();
     }
+
+    [HttpPost("rate")]
+    public async Task<IActionResult> RateEquipment(int equipmentId, int rating)
+    {
+        if (rating < 1 || rating > 5) return BadRequest("Рейтинг должен быть от 1 до 5");
+        var eqRating = await _context.EquipmentRatings.FindAsync(equipmentId);
+        if (eqRating == null) return NotFound();
+        // Обновляем средний рейтинг (можно взвешенное обновление)
+        var total = eqRating.AvgRating * eqRating.RentalCount + rating;
+        eqRating.RentalCount += 1;
+        eqRating.AvgRating = total / eqRating.RentalCount;
+        await _context.SaveChangesAsync();
+        return Ok();
+    }
+
+
 }

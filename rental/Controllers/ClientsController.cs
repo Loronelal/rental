@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using rental.Entities;
 using rental.Data;
+using rental.Entities;
 
 namespace rental.Controllers;
 

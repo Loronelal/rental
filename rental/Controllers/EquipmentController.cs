@@ -41,6 +41,73 @@ public class EquipmentController : ControllerBase
         return equipment;
     }
 
+
+    [HttpGet("top")]
+    public async Task<ActionResult<IEnumerable<object>>> GetTopRated()
+    {
+        var top = await _context.EquipmentRatings
+            .OrderByDescending(r => r.RentalCount)
+            .ThenByDescending(r => r.AvgRating)
+            .Take(5)
+            .Select(r => new
+            {
+                r.EquipmentId,
+                EquipmentName = r.Equipment.Name,
+                r.RentalCount,
+                r.AvgRating
+            })
+            .ToListAsync();
+        return Ok(top);
+    }
+
+
+    [HttpGet("available")]
+    public async Task<ActionResult<IEnumerable<EquipmentDto>>> GetAvailable(
+    [FromQuery] int? typeId,
+    [FromQuery] DateTime start,
+    [FromQuery] DateTime end)
+    {
+        // Все ID техники, занятой в арендах или на обслуживании в указанный интервал
+        var busyIds = await _context.Rentals
+            .Where(r => r.Status == "активно" && r.StartDate < end && r.EndDate > start)
+            .Select(r => r.EquipmentId)
+            .Union(
+                _context.Maintenances
+                    .Where(m => m.StartDate < end && m.EndDate > start)
+                    .Select(m => m.EquipmentId)
+            )
+            .Distinct()
+            .ToListAsync();
+
+        var query = _context.Equipment
+            .Where(e => e.Status == "доступен" && !busyIds.Contains(e.Id))
+            .Include(e => e.Type)
+            .Include(e => e.Rating)
+            .AsQueryable();
+
+        if (typeId.HasValue)
+            query = query.Where(e => e.TypeId == typeId.Value);
+
+        var result = await query
+            .Select(e => new EquipmentDto
+            {
+                Id = e.Id,
+                Name = e.Name,
+                TypeName = e.Type.Name,
+                Year = e.Year,
+                HourlyRate = e.HourlyRate,
+                Status = e.Status,
+                AvgRating = e.Rating != null ? e.Rating.AvgRating : 0,
+                RentalCount = e.Rating != null ? e.Rating.RentalCount : 0
+            })
+            .ToListAsync();
+
+        return Ok(result);
+    }
+
+
+
+
     [HttpPost]
     public async Task<ActionResult<Equipment>> PostEquipment(Equipment equipment)
     {

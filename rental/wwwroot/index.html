@@ -11,30 +11,159 @@
 </head>
 <body>
     <div class="container mt-4">
-        <h1 class="mb-4">🚜 Сервис аренды техники</h1>
+        <!-- Шапка с кнопками входа -->
+        <div class="d-flex justify-content-between align-items-center">
+            <h1 class="mb-0">🚜 Сервис аренды техники</h1>
+            <div>
+                <span id="userStatus" class="me-2">Гость</span>
+                <button id="loginBtn" class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#authModal">Вход</button>
+                <button id="registerBtn" class="btn btn-outline-secondary btn-sm" data-bs-toggle="modal" data-bs-target="#authModal">Регистрация</button>
+                <button id="logoutBtn" class="btn btn-outline-danger btn-sm d-none">Выйти</button>
+            </div>
+        </div>
+        <hr>
 
         <!-- Навигация вкладками -->
         <ul class="nav nav-tabs" id="mainTabs" role="tablist">
-            <li class="nav-item" role="presentation">
-                <button class="nav-link active" id="clients-tab" data-bs-toggle="tab" data-bs-target="#clients" type="button" role="tab">Клиенты</button>
+            <li class="nav-item">
+                <button class="nav-link active" id="catalog-tab" data-bs-toggle="tab" data-bs-target="#catalog" type="button" role="tab">Каталог</button>
             </li>
-            <li class="nav-item" role="presentation">
+            <li class="nav-item">
+                <button class="nav-link" id="profile-tab" data-bs-toggle="tab" data-bs-target="#profile" type="button" role="tab">Личный кабинет</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="analytics-tab" data-bs-toggle="tab" data-bs-target="#analytics" type="button" role="tab">Аналитика</button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" id="clients-tab" data-bs-toggle="tab" data-bs-target="#clients" type="button" role="tab">Клиенты</button>
+            </li>
+            <li class="nav-item">
                 <button class="nav-link" id="equipment-tab" data-bs-toggle="tab" data-bs-target="#equipment" type="button" role="tab">Техника</button>
             </li>
-            <li class="nav-item" role="presentation">
+            <li class="nav-item">
                 <button class="nav-link" id="rentals-tab" data-bs-toggle="tab" data-bs-target="#rentals" type="button" role="tab">Бронирования</button>
             </li>
         </ul>
 
         <div class="tab-content mt-3">
-            <!-- Вкладка Клиенты -->
-            <div class="tab-pane fade show active" id="clients" role="tabpanel">
+
+            <!-- ========== КАТАЛОГ ========== -->
+            <div class="tab-pane fade show active" id="catalog" role="tabpanel">
+                <h3>Каталог техники</h3>
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <label>Тип</label>
+                        <select id="catalogType" class="form-select">
+                            <option value="">Все</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label>Год от</label>
+                        <input type="number" id="catalogYearFrom" class="form-control" placeholder="Год">
+                    </div>
+                    <div class="col-md-3">
+                        <label>Цена до (руб/час)</label>
+                        <input type="number" id="catalogPriceTo" class="form-control" placeholder="Цена">
+                    </div>
+                    <div class="col-md-3">
+                        <label>Статус</label>
+                        <select id="catalogStatus" class="form-select">
+                            <option value="">Все</option>
+                            <option value="доступен">доступен</option>
+                            <option value="в аренде">в аренде</option>
+                            <option value="на обслуживании">на обслуживании</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="applyFilters()">Применить фильтры</button>
+                <div id="catalogResults" class="row mt-3"></div>
+            </div>
+
+            <!-- ========== ЛИЧНЫЙ КАБИНЕТ ========== -->
+            <div class="tab-pane fade" id="profile" role="tabpanel">
+                <h3>Личный кабинет</h3>
+                <div id="profileRentals"><p>Войдите, чтобы увидеть свои бронирования</p></div>
+                <hr>
+                <h5>Оплата бронирования</h5>
+                <form id="paymentForm" class="row g-2">
+                    <div class="col-md-3">
+                        <label>ID бронирования</label>
+                        <input type="number" id="paymentRentalId" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label>Сумма</label>
+                        <input type="number" step="0.01" id="paymentAmount" class="form-control" required>
+                    </div>
+                    <div class="col-md-3">
+                        <label>Метод</label>
+                        <select id="paymentMethod" class="form-select">
+                            <option value="карта">Карта</option>
+                            <option value="наличные">Наличные</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-success w-100">Внести оплату</button>
+                    </div>
+                </form>
+                <hr>
+                <h5>Оценить технику</h5>
+                <form id="ratingForm" class="row g-2">
+                    <div class="col-md-4">
+                        <label>ID техники</label>
+                        <input type="number" id="ratingEquipmentId" class="form-control" required>
+                    </div>
+                    <div class="col-md-4">
+                        <label>Оценка (1–5)</label>
+                        <input type="number" id="ratingValue" class="form-control" min="1" max="5" required>
+                    </div>
+                    <div class="col-md-4 d-flex align-items-end">
+                        <button type="submit" class="btn btn-warning w-100">Оценить</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ========== АНАЛИТИКА ========== -->
+            <div class="tab-pane fade" id="analytics" role="tabpanel">
+                <h3>Аналитика</h3>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>ТОП-5 популярной техники</h5>
+                        <div id="topRated"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <h5>Выручка за период</h5>
+                        <form id="revenueForm" class="row g-2">
+                            <div class="col-md-5">
+                                <label>Дата начала</label>
+                                <input type="date" id="revenueStart" class="form-control" required>
+                            </div>
+                            <div class="col-md-5">
+                                <label>Дата окончания</label>
+                                <input type="date" id="revenueEnd" class="form-control" required>
+                            </div>
+                            <div class="col-md-2 d-flex align-items-end">
+                                <button type="submit" class="btn btn-primary w-100">Показать</button>
+                            </div>
+                        </form>
+                        <div id="revenueResults" class="mt-2"></div>
+                    </div>
+                </div>
+                <hr>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h5>Просроченное ТО</h5>
+                        <div id="overdueMaintenance"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== КЛИЕНТЫ (админ) ========== -->
+            <div class="tab-pane fade" id="clients" role="tabpanel">
                 <div class="d-flex justify-content-between mb-3">
                     <h3>Список клиентов</h3>
                     <button class="btn btn-primary" onclick="showClientForm()"><i class="fas fa-plus"></i> Добавить клиента</button>
                 </div>
                 <div id="clientsList"></div>
-                <!-- Форма для клиента  -->
                 <div id="clientFormContainer" style="display:none;" class="card p-3 mt-3">
                     <h5 id="clientFormTitle">Добавление клиента</h5>
                     <form id="clientForm">
@@ -61,14 +190,13 @@
                 </div>
             </div>
 
-            <!-- Вкладка Техника -->
+            <!-- ========== ТЕХНИКА (админ) ========== -->
             <div class="tab-pane fade" id="equipment" role="tabpanel">
                 <div class="d-flex justify-content-between mb-3">
                     <h3>Список техники</h3>
                     <button class="btn btn-primary" onclick="showEquipmentForm()"><i class="fas fa-plus"></i> Добавить технику</button>
                 </div>
                 <div id="equipmentList"></div>
-                <!-- Форма для техники -->
                 <div id="equipmentFormContainer" style="display:none;" class="card p-3 mt-3">
                     <h5 id="equipmentFormTitle">Добавление техники</h5>
                     <form id="equipmentForm">
@@ -103,14 +231,13 @@
                 </div>
             </div>
 
-            <!-- Вкладка Бронирования -->
+            <!-- ========== БРОНИРОВАНИЯ (админ) ========== -->
             <div class="tab-pane fade" id="rentals" role="tabpanel">
                 <div class="d-flex justify-content-between mb-3">
                     <h3>Список бронирований</h3>
                     <button class="btn btn-primary" onclick="showRentalForm()"><i class="fas fa-plus"></i> Создать бронирование</button>
                 </div>
                 <div id="rentalsList"></div>
-                <!-- Форма бронирования -->
                 <div id="rentalFormContainer" style="display:none;" class="card p-3 mt-3">
                     <h5>Новое бронирование</h5>
                     <form id="rentalForm">
@@ -134,6 +261,61 @@
                         <button type="button" class="btn btn-secondary" onclick="hideRentalForm()">Отмена</button>
                     </form>
                 </div>
+            </div>
+
+        </div><!-- /tab-content -->
+    </div><!-- /container -->
+    <!-- Модальное окно для входа/регистрации -->
+    <div class="modal fade" id="authModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="authModalLabel">Вход</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="authForm">
+                        <div id="authMode" class="mb-2">
+                            <span id="authToggle" class="text-primary" style="cursor:pointer;">Нет аккаунта? Зарегистрироваться</span>
+                        </div>
+                        <div class="mb-2">
+                            <label>Имя пользователя</label>
+                            <input type="text" id="authUsername" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Пароль</label>
+                            <input type="password" id="authPassword" class="form-control" required>
+                        </div>
+                        <div id="registerFields" style="display:none;">
+                            <div class="mb-2">
+                                <label>Полное имя</label>
+                                <input type="text" id="authName" class="form-control">
+                            </div>
+                            <div class="mb-2">
+                                <label>Телефон</label>
+                                <input type="text" id="authPhone" class="form-control">
+                            </div>
+                            <div class="mb-2">
+                                <label>Email</label>
+                                <input type="email" id="authEmail" class="form-control">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Войти</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно для деталей техники -->
+    <div class="modal fade" id="equipmentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="equipmentModalLabel">Детали техники</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="equipmentModalBody"></div>
             </div>
         </div>
     </div>
