@@ -40,7 +40,7 @@ public class MaintenancesController : ControllerBase
     [HttpGet("overdue")]
     public async Task<ActionResult<IEnumerable<Maintenance>>> GetOverdue()
     {
-        var now = DateTime.Now;
+        var now = DateTime.UtcNow;  // заменяем DateTime.Now на UtcNow
         var overdue = await _context.Maintenances
             .Where(m => m.EndDate < now)
             .Include(m => m.Equipment)

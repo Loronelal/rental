@@ -10,5 +10,6 @@
         public string Status { get; set; } = string.Empty;
         public decimal AvgRating { get; set; }
         public int RentalCount { get; set; }
+        public string OwnerName { get; set; } = string.Empty;   
     }
 }

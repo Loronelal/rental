@@ -26,6 +26,9 @@ namespace rental.Entities
         [Column("password_hash")]
         public string? PasswordHash { get; set; } = string.Empty;
 
+        [Column("role")]
+        public string Role { get; set; } = "User";
+
         public ICollection<Rental> Rentals { get; set; } = new List<Rental>();
     }
 }

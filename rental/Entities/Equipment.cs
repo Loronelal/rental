@@ -7,7 +7,7 @@ public class Equipment
     [Column("id")]
     public int Id { get; set; }
 
-    [Column("name")]      // если колонка есть
+    [Column("name")]
     public string Name { get; set; } = string.Empty;
 
     [Column("type_id")]
@@ -22,7 +22,12 @@ public class Equipment
     [Column("status")]
     public string Status { get; set; } = "доступен";
 
-    public EquipmentType Type { get; set; } = null!;
+    [Column("owner_id")]
+    public int? OwnerId { get; set; }   // сделано nullable
+
+    public Client? Owner { get; set; }   // nullable
+
+    public EquipmentType? Type { get; set; } = null!;
     public ICollection<Rental> Rentals { get; set; } = new List<Rental>();
     public EquipmentRating? Rating { get; set; }
     public ICollection<Maintenance> Maintenances { get; set; } = new List<Maintenance>();

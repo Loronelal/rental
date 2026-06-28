@@ -34,7 +34,8 @@ public class AuthController : ControllerBase
             PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
             Name = dto.Name,
             Phone = dto.Phone,
-            Email = dto.Email
+            Email = dto.Email,
+            Role = "User"
         };
 
         _context.Clients.Add(client);
@@ -52,7 +53,7 @@ public class AuthController : ControllerBase
             return Unauthorized("Неверное имя или пароль");
 
         var token = GenerateJwtToken(client);
-        return Ok(new { token, clientId = client.Id });
+        return Ok(new { token, clientId = client.Id, role = client.Role });
     }
 
     private string GenerateJwtToken(Client client)
@@ -63,7 +64,8 @@ public class AuthController : ControllerBase
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, client.Id.ToString()),
-            new Claim(ClaimTypes.Name, client.Username)
+            new Claim(ClaimTypes.Name, client.Username),
+            new Claim(ClaimTypes.Role, client.Role)
         };
 
         var token = new JwtSecurityToken(

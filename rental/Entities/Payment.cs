@@ -18,5 +18,5 @@ public class Payment
     [Column("method")]
     public string Method { get; set; } = "карта";
 
-    public Rental Rental { get; set; } = null!;
+    public Rental? Rental { get; set; }
 }

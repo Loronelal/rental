@@ -1,0 +1,32 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Тест API</title>
+</head>
+<body>
+    <h1>Тест подключения к API</h1>
+    <div id="output">Загрузка...</div>
+
+    <script>
+        fetch('/api/equipment')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                const output = document.getElementById('output');
+                if (data.length === 0) {
+                    output.innerHTML = 'Техника не найдена (пустой массив).';
+                } else {
+                    output.innerHTML = '<ul>' + data.map(item => `<li>${item.name} — ${item.hourlyRate} руб/час</li>`).join('') + '</ul>';
+                }
+            })
+            .catch(error => {
+                document.getElementById('output').innerHTML = 'Ошибка: ' + error.message;
+            });
+    </script>
+</body>
+</html>

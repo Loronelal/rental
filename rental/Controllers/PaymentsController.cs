@@ -41,8 +41,12 @@ public class PaymentsController : ControllerBase
     [HttpGet("revenue")]
     public async Task<ActionResult> GetRevenue([FromQuery] DateTime start, [FromQuery] DateTime end)
     {
+        // Принудительно переводим в UTC
+        DateTime startUtc = DateTime.SpecifyKind(start, DateTimeKind.Utc);
+        DateTime endUtc = DateTime.SpecifyKind(end, DateTimeKind.Utc);
+
         var revenue = await _context.Payments
-            .Where(p => p.PaymentDate >= start && p.PaymentDate <= end)
+            .Where(p => p.PaymentDate >= startUtc && p.PaymentDate <= endUtc)
             .Join(_context.Rentals, p => p.RentalId, r => r.Id, (p, r) => new { p, r })
             .Join(_context.Equipment, pr => pr.r.EquipmentId, e => e.Id, (pr, e) => new { pr.p, pr.r, e })
             .Join(_context.EquipmentTypes, pre => pre.e.TypeId, t => t.Id, (pre, t) => new { pre.p, pre.r, pre.e, t })
