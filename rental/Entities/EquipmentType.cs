@@ -13,5 +13,8 @@ public class EquipmentType
     [Column("description")]
     public string? Description { get; set; }
 
+    [Column("imageurl")]   // <-- добавляем
+    public string? ImageUrl { get; set; }   // <-- добавляем
+
     public ICollection<Equipment> EquipmentItems { get; set; } = new List<Equipment>();
 }

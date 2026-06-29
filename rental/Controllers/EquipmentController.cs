@@ -20,11 +20,12 @@ public class EquipmentController : ControllerBase
 
     // GET: api/equipment (публичный каталог с фильтрацией)
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Equipment>>> GetEquipment(
-        [FromQuery] int? typeId,
-        [FromQuery] int? yearFrom,
-        [FromQuery] decimal? priceTo,
-        [FromQuery] string? status)
+    [HttpGet]
+    public async Task<ActionResult<IEnumerable<EquipmentDto>>> GetEquipment(
+    [FromQuery] int? typeId,
+    [FromQuery] int? yearFrom,
+    [FromQuery] decimal? priceTo,
+    [FromQuery] string? status)
     {
         var query = _context.Equipment
             .Include(e => e.Type)
@@ -41,7 +42,25 @@ public class EquipmentController : ControllerBase
         if (!string.IsNullOrEmpty(status))
             query = query.Where(e => e.Status == status);
 
-        return await query.ToListAsync();
+        var result = await query
+            .Select(e => new EquipmentDto
+            {
+                Id = e.Id,
+                Name = e.Name,
+                TypeId = e.TypeId,
+                TypeName = e.Type.Name,
+                TypeImageUrl = e.Type.ImageUrl,   // <-- ключевое поле
+                Year = e.Year,
+                HourlyRate = e.HourlyRate,
+                Status = e.Status,
+                AvgRating = e.Rating != null ? e.Rating.AvgRating : 0,
+                RentalCount = e.Rating != null ? e.Rating.RentalCount : 0,
+                OwnerName = e.Owner != null ? e.Owner.Name : "",
+                OwnerId = e.OwnerId
+            })
+            .ToListAsync();
+
+        return Ok(result);
     }
 
     // GET: api/equipment/my – моя техника (авторизованный пользователь)
@@ -120,13 +139,16 @@ public class EquipmentController : ControllerBase
             {
                 Id = e.Id,
                 Name = e.Name,
+                TypeId = e.TypeId,
                 TypeName = e.Type.Name,
+                TypeImageUrl = e.Type.ImageUrl,
                 Year = e.Year,
                 HourlyRate = e.HourlyRate,
                 Status = e.Status,
                 AvgRating = e.Rating != null ? e.Rating.AvgRating : 0,
                 RentalCount = e.Rating != null ? e.Rating.RentalCount : 0,
-                OwnerName = e.Owner != null ? e.Owner.Name : ""
+                OwnerName = e.Owner != null ? e.Owner.Name : "",
+                OwnerId = e.OwnerId
             })
             .ToListAsync();
 
@@ -181,12 +203,14 @@ public class EquipmentController : ControllerBase
             Id = equipment.Id,
             Name = equipment.Name,
             TypeName = equipment.Type?.Name ?? "",
+            TypeImageUrl = equipment.Type?.ImageUrl,
             Year = equipment.Year,
             HourlyRate = equipment.HourlyRate,
             Status = equipment.Status,
             AvgRating = equipment.Rating?.AvgRating ?? 0,
             RentalCount = equipment.Rating?.RentalCount ?? 0,
-            OwnerName = equipment.Owner?.Name ?? ""
+            OwnerName = equipment.Owner?.Name ?? "",
+            OwnerId = equipment.OwnerId
         };
 
         return Ok(dto);

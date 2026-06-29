@@ -1,0 +1,137 @@
+﻿<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Аналитика — RentTech</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="content-wrapper">
+        <!-- ШАПКА -->
+        <header class="header-top">
+            <div class="container-custom d-flex flex-wrap align-items-center justify-content-between">
+                <a href="catalog.html" class="logo"><i class="fas fa-tractor"></i> RentTech</a>
+                <div class="contact-info d-none d-md-block">
+                    <i class="fas fa-phone-alt"></i> +7 (800) 123-45-67
+                    <span class="mx-2">|</span>
+                    <i class="fas fa-clock"></i> Ежедневно 8:00–20:00
+                </div>
+                <div class="auth-buttons">
+                    <span id="userStatus" class="me-2">Гость</span>
+                    <button id="loginBtn" class="btn btn-outline-primary btn-sm" onclick="openAuthModal('login')">Вход</button>
+                    <button id="registerBtn" class="btn btn-secondary btn-sm" onclick="openAuthModal('register')">Регистрация</button>
+                    <button id="logoutBtn" class="btn btn-outline-danger btn-sm d-none" onclick="logout()">Выйти</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- НАВИГАЦИЯ (активна "Аналитика") -->
+        <div class="container-custom">
+            <ul class="nav nav-tabs">
+                <li class="nav-item"><a class="nav-link" href="catalog.html">Каталог</a></li>
+                <li class="nav-item"><a class="nav-link" href="profile.html">Личный кабинет</a></li>
+                <li class="nav-item"><a class="nav-link active" href="analytics.html">Аналитика</a></li>
+                <li class="nav-item"><a class="nav-link" href="myEquipment.html">Моя техника</a></li>
+                <li class="nav-item admin-tab"><a class="nav-link" href="clients.html">Клиенты</a></li>
+                <li class="nav-item admin-tab"><a class="nav-link" href="equipment.html">Техника</a></li>
+                <li class="nav-item admin-tab"><a class="nav-link" href="rentals.html">Бронирования</a></li>
+            </ul>
+        </div>
+
+        <!-- ОСНОВНОЙ КОНТЕНТ -->
+        <div class="container-custom mt-3">
+            <h3>Аналитика</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>ТОП-5 популярной техники</h5>
+                    <div id="topRated"></div>
+                </div>
+                <div class="col-md-6">
+                    <h5>Выручка за период</h5>
+                    <form id="revenueForm" class="row g-2">
+                        <div class="col-md-5"><input type="date" id="revenueStart" class="form-control" required></div>
+                        <div class="col-md-5"><input type="date" id="revenueEnd" class="form-control" required></div>
+                        <div class="col-md-2"><button type="submit" class="btn btn-primary w-100">Показать</button></div>
+                    </form>
+                    <div id="revenueResults" class="mt-2"></div>
+                </div>
+            </div>
+            <hr>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Просроченное ТО</h5>
+                    <div id="overdueMaintenance"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- МОДАЛКИ И ФУТЕР (копируем из catalog.html) -->
+    <div class="modal fade" id="authModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="authModalLabel">Вход</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="authForm">
+                        <div class="mb-2">
+                            <span id="authToggle" onclick="toggleAuthMode()">Нет аккаунта? Зарегистрироваться</span>
+                        </div>
+                        <div class="mb-2"><label>Имя пользователя</label><input type="text" id="authUsername" class="form-control" required></div>
+                        <div class="mb-2"><label>Пароль</label><input type="password" id="authPassword" class="form-control" required></div>
+                        <div id="registerFields" style="display:none;">
+                            <div class="mb-2"><label>Полное имя</label><input type="text" id="authName" class="form-control"></div>
+                            <div class="mb-2"><label>Телефон</label><input type="text" id="authPhone" class="form-control"></div>
+                            <div class="mb-2"><label>Email</label><input type="email" id="authEmail" class="form-control"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Войти</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="equipmentModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="equipmentModalLabel">Детали техники</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="equipmentModalBody"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="container-custom">
+            <div class="row">
+                <div class="col-md-4">
+                    <h5>RentTech</h5>
+                    <p>Сервис аренды спецтехники. Более 100 единиц техники в наличии.</p>
+                </div>
+                <div class="col-md-4">
+                    <h5>Контакты</h5>
+                    <p><i class="fas fa-phone-alt"></i> +7 (800) 123-45-67</p>
+                    <p><i class="fas fa-envelope"></i> info@renttech.ru</p>
+                </div>
+                <div class="col-md-4">
+                    <h5>Ссылки</h5>
+                    <p><a href="#">О нас</a></p>
+                    <p><a href="#">Как арендовать</a></p>
+                </div>
+            </div>
+            <div class="copyright">&copy; 2026 RentTech</div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

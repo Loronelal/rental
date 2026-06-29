@@ -133,6 +133,11 @@ public class RentalsController : ControllerBase
         if (equipment == null)
             return BadRequest("Техника не найдена");
 
+        // ----- НОВАЯ ПРОВЕРКА -----
+        if (equipment.OwnerId == clientId)
+            return BadRequest("Нельзя забронировать собственную технику");
+        // --------------------------
+
         // 6. Проверяем, что техника доступна
         if (equipment.Status != "доступен")
             return BadRequest("Техника сейчас недоступна для аренды");

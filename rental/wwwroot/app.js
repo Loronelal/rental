@@ -2,6 +2,7 @@
 // 1. Конфигурация и базовые функции
 // ============================================================
 const API_BASE = '/api';
+let currentPageName = 'catalog';
 
 function getToken() {
     return localStorage.getItem('token');
@@ -37,155 +38,200 @@ async function fetchAPI(endpoint, options = {}) {
         headers
     });
 
-    // Если статус 204 (No Content) — возвращаем null без парсинга
     if (response.status === 204) {
         return null;
     }
 
-    // Если ответ не успешный — читаем текст ошибки
     if (!response.ok) {
         const errorText = await response.text();
         throw new Error(`Ошибка ${response.status}: ${errorText}`);
     }
 
-    // Проверяем, есть ли тело ответа
     const contentLength = response.headers.get('content-length');
     if (contentLength && parseInt(contentLength) === 0) {
         return null;
     }
 
-    // Пытаемся парсить JSON
     try {
         return await response.json();
-    } catch (e) {
-        // Если не удалось распарсить, возвращаем null
+    } catch {
         return null;
     }
 }
 
 // ============================================================
-// 2. Управление аутентификацией (UI)
+// 2. Аутентификация (UI)
 // ============================================================
 function updateAuthUI() {
-    const token = getToken();
     const userStatus = document.getElementById('userStatus');
     const loginBtn = document.getElementById('loginBtn');
     const registerBtn = document.getElementById('registerBtn');
     const logoutBtn = document.getElementById('logoutBtn');
-    if (token) {
-        userStatus.innerText = 'Пользователь';
-        loginBtn.classList.add('d-none');
-        registerBtn.classList.add('d-none');
-        logoutBtn.classList.remove('d-none');
-    } else {
-        userStatus.innerText = 'Гость';
-        loginBtn.classList.remove('d-none');
-        registerBtn.classList.remove('d-none');
-        logoutBtn.classList.add('d-none');
+
+    const token = getToken();
+    if (userStatus) {
+        userStatus.innerText = token ? 'Пользователь' : 'Гость';
     }
-    // Скрыть/показать админские вкладки
+    if (loginBtn) loginBtn.classList.toggle('d-none', !!token);
+    if (registerBtn) registerBtn.classList.toggle('d-none', !!token);
+    if (logoutBtn) logoutBtn.classList.toggle('d-none', !token);
+
     const showAdmin = isAdmin();
-    document.querySelectorAll('.admin-tab').forEach(tab => tab.style.display = showAdmin ? '' : 'none');
+    document.querySelectorAll('.admin-tab').forEach(tab => {
+        tab.style.display = showAdmin ? '' : 'none';
+    });
 }
 
-// Модалка аутентификации
-let authMode = 'login'; // 'login' or 'register'
+let authMode = 'login';
 
 function toggleAuthMode() {
     const isLogin = authMode === 'login';
     authMode = isLogin ? 'register' : 'login';
-    document.getElementById('authModalLabel').innerText = isLogin ? 'Регистрация' : 'Вход';
-    document.getElementById('registerFields').style.display = isLogin ? 'block' : 'none';
-    document.getElementById('authToggle').innerText = isLogin ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться';
-    document.querySelector('#authForm button').innerText = isLogin ? 'Зарегистрироваться' : 'Войти';
+    const label = document.getElementById('authModalLabel');
+    const registerFields = document.getElementById('registerFields');
+    const toggle = document.getElementById('authToggle');
+    const submitBtn = document.querySelector('#authForm button');
+    if (label) label.innerText = isLogin ? 'Регистрация' : 'Вход';
+    if (registerFields) registerFields.style.display = isLogin ? 'block' : 'none';
+    if (toggle) toggle.innerText = isLogin ? 'Уже есть аккаунт? Войти' : 'Нет аккаунта? Зарегистрироваться';
+    if (submitBtn) submitBtn.innerText = isLogin ? 'Зарегистрироваться' : 'Войти';
 }
 
 window.openAuthModal = function (mode) {
     authMode = mode;
     const isLogin = mode === 'login';
-    document.getElementById('authModalLabel').innerText = isLogin ? 'Вход' : 'Регистрация';
-    document.getElementById('registerFields').style.display = isLogin ? 'none' : 'block';
-    document.getElementById('authToggle').innerText = isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти';
-    document.querySelector('#authForm button').innerText = isLogin ? 'Войти' : 'Зарегистрироваться';
+    const label = document.getElementById('authModalLabel');
+    const registerFields = document.getElementById('registerFields');
+    const toggle = document.getElementById('authToggle');
+    const submitBtn = document.querySelector('#authForm button');
+    if (label) label.innerText = isLogin ? 'Вход' : 'Регистрация';
+    if (registerFields) registerFields.style.display = isLogin ? 'none' : 'block';
+    if (toggle) toggle.innerText = isLogin ? 'Нет аккаунта? Зарегистрироваться' : 'Уже есть аккаунт? Войти';
+    if (submitBtn) submitBtn.innerText = isLogin ? 'Войти' : 'Зарегистрироваться';
     const modal = new bootstrap.Modal(document.getElementById('authModal'));
     modal.show();
 };
 
-document.getElementById('authForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const username = document.getElementById('authUsername').value.trim();
-    const password = document.getElementById('authPassword').value.trim();
-    const isLogin = document.querySelector('#authForm button').innerText === 'Войти';
-    let url, body;
-    if (isLogin) {
-        url = '/api/auth/login';
-        body = { username, password };
-    } else {
-        url = '/api/auth/register';
-        body = {
-            username,
-            password,
-            name: document.getElementById('authName').value.trim(),
-            phone: document.getElementById('authPhone').value.trim(),
-            email: document.getElementById('authEmail').value.trim()
-        };
-        if (!body.name || !body.phone) {
-            alert('Заполните имя и телефон');
-            return;
-        }
-    }
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        if (!response.ok) {
-            const text = await response.text();
-            throw new Error(text);
-        }
+const authForm = document.getElementById('authForm');
+if (authForm) {
+    authForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const username = document.getElementById('authUsername').value.trim();
+        const password = document.getElementById('authPassword').value.trim();
+        const isLogin = document.querySelector('#authForm button').innerText === 'Войти';
+        let url, body;
         if (isLogin) {
-            const data = await response.json();
-            setToken(data.token);
-            localStorage.setItem('role', data.role);
-            localStorage.setItem('clientId', data.clientId);
-            bootstrap.Modal.getInstance(document.getElementById('authModal')).hide();
-            updateAuthUI();
-            loadCatalog();
-            loadMyRentals();
-            loadMyEquipment();
-            loadAnalytics();
-            loadClients();
-            loadEquipment();
-            loadRentals();
+            url = '/api/auth/login';
+            body = { username, password };
         } else {
-            alert('Регистрация успешна! Теперь войдите.');
-            openAuthModal('login');
+            url = '/api/auth/register';
+            body = {
+                username,
+                password,
+                name: document.getElementById('authName').value.trim(),
+                phone: document.getElementById('authPhone').value.trim(),
+                email: document.getElementById('authEmail').value.trim()
+            };
+            if (!body.name || !body.phone) {
+                alert('Заполните имя и телефон');
+                return;
+            }
         }
-    } catch (err) {
-        alert('Ошибка: ' + err.message);
-    }
-});
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!response.ok) {
+                const text = await response.text();
+                throw new Error(text);
+            }
+            if (isLogin) {
+                const data = await response.json();
+                setToken(data.token);
+                localStorage.setItem('role', data.role);
+                localStorage.setItem('clientId', data.clientId);
+                bootstrap.Modal.getInstance(document.getElementById('authModal')).hide();
+                updateAuthUI();
+                loadPageData();
+            } else {
+                alert('Регистрация успешна! Теперь войдите.');
+                openAuthModal('login');
+            }
+        } catch (err) {
+            alert('Ошибка: ' + err.message);
+        }
+    });
+}
 
 function logout() {
     removeToken();
     updateAuthUI();
-    loadCatalog();
-    loadMyRentals();
-    loadMyEquipment();
-    loadAnalytics();
-    loadClients();
-    loadEquipment();
-    loadRentals();
+    loadPageData();
 }
 
 // ============================================================
-// 3. Загрузка данных для фильтров
+// 3. Определение текущей страницы
 // ============================================================
+function getCurrentPage() {
+    const path = window.location.pathname;
+    if (path.includes('catalog')) return 'catalog';
+    if (path.includes('profile')) return 'profile';
+    if (path.includes('analytics')) return 'analytics';
+    if (path.includes('myEquipment')) return 'myEquipment';
+    if (path.includes('clients')) return 'clients';
+    if (path.includes('equipment')) return 'equipment';
+    if (path.includes('rentals')) return 'rentals';
+    return 'catalog';
+}
+
+function loadPageData() {
+    currentPageName = getCurrentPage();
+    switch (currentPageName) {
+        case 'catalog':
+            loadFilterTypes();
+            loadCatalog();
+            break;
+        case 'profile':
+            loadMyRentals();
+            loadPaymentOptions();
+            loadRatingOptions();
+            break;
+        case 'analytics':
+            loadAnalytics();
+            break;
+        case 'myEquipment':
+            loadMyEquipment();
+            loadMyEquipmentTypes();
+            break;
+        case 'clients':
+            loadClients();
+            break;
+        case 'equipment':
+            loadEquipment();
+            break;
+        case 'rentals':
+            loadRentals();
+            break;
+        default:
+            break;
+    }
+}
+
+// ============================================================
+// 4. Каталог (фильтры, загрузка, сортировка, пагинация)
+// ============================================================
+let allEquipment = [];
+let filteredEquipment = [];
+let currentPage = 1;
+const pageSize = 6;
+
 async function loadFilterTypes() {
+    const select = document.getElementById('filterType');
+    if (!select) return;
     try {
         const types = await fetchAPI('equipmenttypes');
-        const select = document.getElementById('filterType');
         select.innerHTML = '<option value="">Все типы</option>';
         types.forEach(t => {
             const opt = document.createElement('option');
@@ -198,15 +244,10 @@ async function loadFilterTypes() {
     }
 }
 
-// ============================================================
-// 4. Каталог (загрузка, фильтрация, сортировка, пагинация)
-// ============================================================
-let allEquipment = [];
-let filteredEquipment = [];
-let currentPage = 1;
-const pageSize = 6;
-
 async function loadCatalog() {
+    if (currentPageName !== 'catalog') return;
+    const grid = document.getElementById('catalogGrid');
+    if (!grid) return;
     try {
         const items = await fetchAPI('equipment');
         allEquipment = items;
@@ -217,35 +258,38 @@ async function loadCatalog() {
 }
 
 function applyFilters() {
-    const searchText = document.getElementById('searchInput').value.toLowerCase().trim();
-    const typeId = document.getElementById('filterType').value;
-    const priceFrom = parseFloat(document.getElementById('priceFrom').value) || 0;
-    const priceTo = parseFloat(document.getElementById('priceTo').value) || Infinity;
-    const yearFrom = parseInt(document.getElementById('filterYear').value) || 0;
-    const status = document.getElementById('filterStatus').value;
+    const searchInput = document.getElementById('searchInput');
+    const filterType = document.getElementById('filterType');
+    const priceFrom = document.getElementById('priceFrom');
+    const priceTo = document.getElementById('priceTo');
+    const filterYear = document.getElementById('filterYear');
+    const filterStatus = document.getElementById('filterStatus');
+    const sortSelect = document.getElementById('sortSelect');
+
+    if (!searchInput || !filterType || !priceFrom || !priceTo || !filterYear || !filterStatus || !sortSelect) return;
+
+    const searchText = searchInput.value.toLowerCase().trim();
+    const typeId = filterType.value;
+    const priceFromVal = parseFloat(priceFrom.value) || 0;
+    const priceToVal = parseFloat(priceTo.value) || Infinity;
+    const yearFrom = parseInt(filterYear.value) || 0;
+    const status = filterStatus.value;
 
     filteredEquipment = allEquipment.filter(e => {
-        // Поиск по названию и типу
         if (searchText) {
             const nameMatch = e.name.toLowerCase().includes(searchText);
-            const typeName = e.type?.name || '';
-            const typeMatch = typeName.toLowerCase().includes(searchText);
+            const typeMatch = (e.typeName || '').toLowerCase().includes(searchText);
             if (!nameMatch && !typeMatch) return false;
         }
-        // Тип
         if (typeId && e.typeId != typeId) return false;
-        // Цена
         const rate = e.hourlyRate || 0;
-        if (rate < priceFrom || rate > priceTo) return false;
-        // Год
+        if (rate < priceFromVal || rate > priceToVal) return false;
         if (yearFrom && e.year < yearFrom) return false;
-        // Статус
         if (status && e.status !== status) return false;
         return true;
     });
 
-    // Сортировка
-    const sortBy = document.getElementById('sortSelect').value;
+    const sortBy = sortSelect.value;
     switch (sortBy) {
         case 'name':
             filteredEquipment.sort((a, b) => a.name.localeCompare(b.name));
@@ -270,11 +314,16 @@ function applyFilters() {
 function renderCatalog() {
     const container = document.getElementById('catalogGrid');
     const countDisplay = document.getElementById('resultCount');
-    countDisplay.innerText = `Найдено: ${filteredEquipment.length} единиц`;
+    if (!container) return;
+    if (countDisplay) {
+        countDisplay.innerText = `Найдено: ${filteredEquipment.length} единиц`;
+    }
 
     const start = (currentPage - 1) * pageSize;
     const end = Math.min(start + pageSize, filteredEquipment.length);
     const pageItems = filteredEquipment.slice(start, end);
+
+    const currentUserId = localStorage.getItem('clientId') ? parseInt(localStorage.getItem('clientId')) : null;
 
     if (pageItems.length === 0) {
         container.innerHTML = `<div class="col-12 text-center text-muted">Техника не найдена</div>`;
@@ -284,13 +333,21 @@ function renderCatalog() {
                 e.status === 'в аренде' ? 'bg-danger' : 'bg-warning';
             const statusText = e.status === 'доступен' ? 'Доступен' :
                 e.status === 'в аренде' ? 'В аренде' : 'На обслуживании';
-            const disabled = e.status !== 'доступен' ? 'disabled' : '';
-            const rating = e.rating?.avgRating?.toFixed(1) || '0';
-            const rentalCount = e.rating?.rentalCount || 0;
+
+            const isOwner = currentUserId && e.ownerId === currentUserId;
+            const orderBtn = isOwner
+                ? `<button class="btn btn-secondary btn-sm" disabled>Ваша техника</button>`
+                : `<button class="btn btn-success btn-sm" ${e.status !== 'доступен' ? 'disabled' : ''} onclick="quickBook(${e.id})">Заказать</button>`;
+
+            const rating = e.avgRating?.toFixed(1) || '0';
+            const rentalCount = e.rentalCount || 0;
+
+            const imgSrc = e.typeImageUrl || `https://via.placeholder.com/400x200/0d6efd/ffffff?text=${encodeURIComponent(e.typeName)}`;
+
             return `
                 <div class="col-xl-4 col-lg-6 col-md-6 mb-4">
                     <div class="equipment-card">
-                        <img src="https://via.placeholder.com/400x200/0d6efd/ffffff?text=${encodeURIComponent(e.name)}" class="card-img-top" alt="${e.name}">
+                        <img src="${imgSrc}" class="card-img-top" alt="${e.name}">
                         <div class="card-body">
                             <h5 class="card-title">${e.name}</h5>
                             <div class="card-text">
@@ -303,7 +360,7 @@ function renderCatalog() {
                             </div>
                             <div class="btn-group-card">
                                 <button class="btn btn-outline-primary btn-sm" onclick="showDetails(${e.id})">Подробнее</button>
-                                <button class="btn btn-success btn-sm" ${disabled} onclick="quickBook(${e.id})">Заказать</button>
+                                ${orderBtn}
                             </div>
                         </div>
                     </div>
@@ -312,9 +369,9 @@ function renderCatalog() {
         }).join('');
     }
 
-    // Пагинация
     const totalPages = Math.ceil(filteredEquipment.length / pageSize);
     const pagination = document.getElementById('pagination');
+    if (!pagination) return;
     if (totalPages <= 1) {
         pagination.innerHTML = '';
         return;
@@ -343,63 +400,91 @@ function changePage(delta) {
 }
 
 // ============================================================
-// 5. Детали и бронирование
+// 5. Детали и бронирование (модалка)
 // ============================================================
 async function showDetails(id) {
     try {
         const item = await fetchAPI(`equipment/${id}`);
         const body = document.getElementById('equipmentModalBody');
+        if (!body) return;
+
+        const currentUserId = localStorage.getItem('clientId') ? parseInt(localStorage.getItem('clientId')) : null;
+        const isOwner = currentUserId && item.ownerId === currentUserId;
+
+        const imgSrc = item.typeImageUrl || `https://via.placeholder.com/400x200/0d6efd/ffffff?text=${encodeURIComponent(item.typeName)}`;
+
+        let rentalFormHtml = '';
+        if (isOwner) {
+            rentalFormHtml = `<div class="alert alert-warning">Это ваша техника. Вы не можете забронировать её сами.</div>`;
+        } else {
+            rentalFormHtml = `
+                <hr>
+                <h6>Бронирование</h6>
+                <form id="detailRentalForm">
+                    <input type="hidden" id="detailEquipmentId" value="${item.id}">
+                    <div class="mb-2">
+                        <label>Дата начала</label>
+                        <input type="datetime-local" id="detailStart" class="form-control" required>
+                    </div>
+                    <div class="mb-2">
+                        <label>Дата окончания</label>
+                        <input type="datetime-local" id="detailEnd" class="form-control" required>
+                    </div>
+                    <button type="submit" class="btn btn-success">Забронировать</button>
+                </form>
+            `;
+        }
+
         body.innerHTML = `
-            <h4>${item.name}</h4>
-            <p><strong>Год:</strong> ${item.year} · <strong>Ставка:</strong> ${item.hourlyRate} руб/час</p>
-            <p><strong>Статус:</strong> ${item.status}</p>
-            <p><strong>Тип:</strong> ${item.typeName || '—'}</p>
-            <p><strong>Рейтинг:</strong> ${item.avgRating?.toFixed(1) || '0'} (${item.rentalCount || 0} аренд)</p>
-            <p><strong>Владелец:</strong> ${item.ownerName || '—'}</p>
-            <hr>
-            <h6>Бронирование</h6>
-            <form id="detailRentalForm">
-                <input type="hidden" id="detailEquipmentId" value="${item.id}">
-                <div class="mb-2">
-                    <label>Дата начала</label>
-                    <input type="datetime-local" id="detailStart" class="form-control" required>
+            <div class="row">
+                <div class="col-md-6">
+                    <img src="${imgSrc}" class="img-fluid rounded" alt="${item.name}" style="max-height: 300px; width: 100%; object-fit: contain;">
                 </div>
-                <div class="mb-2">
-                    <label>Дата окончания</label>
-                    <input type="datetime-local" id="detailEnd" class="form-control" required>
+                <div class="col-md-6">
+                    <h4>${item.name}</h4>
+                    <p><strong>Год:</strong> ${item.year} · <strong>Ставка:</strong> ${item.hourlyRate} руб/час</p>
+                    <p><strong>Статус:</strong> ${item.status}</p>
+                    <p><strong>Тип:</strong> ${item.typeName || '—'}</p>
+                    <p><strong>Рейтинг:</strong> ${item.avgRating?.toFixed(1) || '0'} (${item.rentalCount || 0} аренд)</p>
+                    <p><strong>Владелец:</strong> ${item.ownerName || '—'}</p>
+                    ${rentalFormHtml}
                 </div>
-                <button type="submit" class="btn btn-success">Забронировать</button>
-            </form>
+            </div>
         `;
-        document.getElementById('detailRentalForm').addEventListener('submit', async function (e) {
-            e.preventDefault();
-            const equipmentId = parseInt(document.getElementById('detailEquipmentId').value);
-            const start = document.getElementById('detailStart').value;
-            const end = document.getElementById('detailEnd').value;
-            if (!start || !end) {
-                alert('Укажите даты');
-                return;
-            }
-            if (!isAuthenticated()) {
-                alert('Пожалуйста, войдите в систему');
-                return;
-            }
-            try {
-                await fetchAPI('rentals', {
-                    method: 'POST',
-                    body: JSON.stringify({
-                        equipmentId,
-                        startDate: new Date(start).toISOString(),
-                        endDate: new Date(end).toISOString()
-                    })
-                });
-                alert('Бронирование создано!');
-                bootstrap.Modal.getInstance(document.getElementById('equipmentModal')).hide();
-                loadCatalog();
-            } catch (err) {
-                alert('Ошибка: ' + err.message);
-            }
-        });
+
+        const form = document.getElementById('detailRentalForm');
+        if (form) {
+            form.addEventListener('submit', async function (e) {
+                e.preventDefault();
+                const equipmentId = parseInt(document.getElementById('detailEquipmentId').value);
+                const start = document.getElementById('detailStart').value;
+                const end = document.getElementById('detailEnd').value;
+                if (!start || !end) {
+                    alert('Укажите даты');
+                    return;
+                }
+                if (!isAuthenticated()) {
+                    alert('Пожалуйста, войдите в систему');
+                    return;
+                }
+                try {
+                    await fetchAPI('rentals', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            equipmentId,
+                            startDate: new Date(start).toISOString(),
+                            endDate: new Date(end).toISOString()
+                        })
+                    });
+                    alert('Бронирование создано!');
+                    bootstrap.Modal.getInstance(document.getElementById('equipmentModal')).hide();
+                    loadCatalog();
+                } catch (err) {
+                    alert('Ошибка: ' + err.message);
+                }
+            });
+        }
+
         const modal = new bootstrap.Modal(document.getElementById('equipmentModal'));
         modal.show();
     } catch (err) {
@@ -419,13 +504,14 @@ async function quickBook(id) {
 // 6. Личный кабинет (мои бронирования)
 // ============================================================
 async function loadMyRentals() {
+    const container = document.getElementById('profileRentals');
+    if (!container) return;
     if (!isAuthenticated()) {
-        document.getElementById('profileRentals').innerHTML = '<p>Войдите, чтобы увидеть свои бронирования</p>';
+        container.innerHTML = '<p>Войдите, чтобы увидеть свои бронирования</p>';
         return;
     }
     try {
         const rentals = await fetchAPI('rentals/my');
-        const container = document.getElementById('profileRentals');
         if (!rentals.length) {
             container.innerHTML = '<p class="text-muted">У вас нет бронирований</p>';
             return;
@@ -471,10 +557,11 @@ async function extendRental(id) {
 }
 
 // ============================================================
-// 7. Оплата и оценка
+// 7. Оплата и оценка (формы)
 // ============================================================
 async function loadPaymentOptions() {
     const select = document.getElementById('paymentRentalId');
+    if (!select) return;
     if (!isAuthenticated()) {
         select.innerHTML = '<option value="">Войдите, чтобы увидеть бронирования</option>';
         return;
@@ -495,6 +582,7 @@ async function loadPaymentOptions() {
 
 async function loadRatingOptions() {
     const select = document.getElementById('ratingEquipmentId');
+    if (!select) return;
     if (!isAuthenticated()) {
         select.innerHTML = '<option value="">Войдите, чтобы оценить технику</option>';
         return;
@@ -514,55 +602,64 @@ async function loadRatingOptions() {
     }
 }
 
-document.getElementById('paymentForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const rentalId = parseInt(document.getElementById('paymentRentalId').value);
-    const amount = parseFloat(document.getElementById('paymentAmount').value);
-    const method = document.getElementById('paymentMethod').value;
-    if (!rentalId || !amount) {
-        alert('Выберите бронирование и укажите сумму');
-        return;
-    }
-    try {
-        await fetchAPI('payments', {
-            method: 'POST',
-            body: JSON.stringify({ rentalId, amount, method })
-        });
-        alert('Оплата внесена');
-        this.reset();
-        loadPaymentOptions();
-        loadMyRentals();
-    } catch (err) {
-        alert('Ошибка: ' + err.message);
-    }
-});
+const paymentForm = document.getElementById('paymentForm');
+if (paymentForm) {
+    paymentForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const rentalId = parseInt(document.getElementById('paymentRentalId').value);
+        const amount = parseFloat(document.getElementById('paymentAmount').value);
+        const method = document.getElementById('paymentMethod').value;
+        if (!rentalId || !amount) {
+            alert('Выберите бронирование и укажите сумму');
+            return;
+        }
+        try {
+            await fetchAPI('payments', {
+                method: 'POST',
+                body: JSON.stringify({ rentalId, amount, method })
+            });
+            alert('Оплата внесена');
+            this.reset();
+            loadPaymentOptions();
+            loadMyRentals();
+        } catch (err) {
+            alert('Ошибка: ' + err.message);
+        }
+    });
+}
 
-document.getElementById('ratingForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const equipmentId = parseInt(document.getElementById('ratingEquipmentId').value);
-    const rating = parseInt(document.getElementById('ratingValue').value);
-    if (!equipmentId || rating < 1 || rating > 5) {
-        alert('Выберите технику и укажите оценку от 1 до 5');
-        return;
-    }
-    try {
-        await fetchAPI(`equipmentratings/rate?equipmentId=${equipmentId}&rating=${rating}`, { method: 'POST' });
-        alert('Спасибо за оценку!');
-        this.reset();
-        loadRatingOptions();
-        loadCatalog();
-    } catch (err) {
-        alert('Ошибка: ' + err.message);
-    }
-});
+const ratingForm = document.getElementById('ratingForm');
+if (ratingForm) {
+    ratingForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const equipmentId = parseInt(document.getElementById('ratingEquipmentId').value);
+        const rating = parseInt(document.getElementById('ratingValue').value);
+        if (!equipmentId || rating < 1 || rating > 5) {
+            alert('Выберите технику и укажите оценку от 1 до 5');
+            return;
+        }
+        try {
+            await fetchAPI(`equipmentratings/rate?equipmentId=${equipmentId}&rating=${rating}`, { method: 'POST' });
+            alert('Спасибо за оценку!');
+            this.reset();
+            loadRatingOptions();
+            loadCatalog();
+        } catch (err) {
+            alert('Ошибка: ' + err.message);
+        }
+    });
+}
 
 // ============================================================
 // 8. Аналитика
 // ============================================================
 async function loadAnalytics() {
+    const topContainer = document.getElementById('topRated');
+    const overdueContainer = document.getElementById('overdueMaintenance');
+    if (!topContainer || !overdueContainer) return;
+
     try {
         const top = await fetchAPI('equipment/top');
-        const topContainer = document.getElementById('topRated');
         if (!top.length) {
             topContainer.innerHTML = '<p class="text-muted">Нет данных</p>';
         } else {
@@ -575,7 +672,6 @@ async function loadAnalytics() {
         }
 
         const overdue = await fetchAPI('maintenances/overdue');
-        const overdueContainer = document.getElementById('overdueMaintenance');
         if (!overdue.length) {
             overdueContainer.innerHTML = '<p class="text-muted">Нет просроченного ТО</p>';
         } else {
@@ -588,40 +684,45 @@ async function loadAnalytics() {
     }
 }
 
-document.getElementById('revenueForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const start = document.getElementById('revenueStart').value;
-    const end = document.getElementById('revenueEnd').value;
-    if (!start || !end) {
-        alert('Укажите даты');
-        return;
-    }
-    try {
-        const data = await fetchAPI(`payments/revenue?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
-        const container = document.getElementById('revenueResults');
-        if (!data.length) {
-            container.innerHTML = '<p class="text-muted">Нет данных</p>';
-        } else {
-            container.innerHTML = `<table class="table table-sm"><thead><tr><th>Тип</th><th>Выручка</th></tr></thead><tbody>${data.map(d => `
-                <tr><td>${d.type}</td><td>${d.total}</td></tr>
-            `).join('')}</tbody></table>`;
+const revenueForm = document.getElementById('revenueForm');
+if (revenueForm) {
+    revenueForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const start = document.getElementById('revenueStart').value;
+        const end = document.getElementById('revenueEnd').value;
+        if (!start || !end) {
+            alert('Укажите даты');
+            return;
         }
-    } catch (err) {
-        alert('Ошибка: ' + err.message);
-    }
-});
+        try {
+            const data = await fetchAPI(`payments/revenue?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+            const container = document.getElementById('revenueResults');
+            if (!container) return;
+            if (!data.length) {
+                container.innerHTML = '<p class="text-muted">Нет данных</p>';
+            } else {
+                container.innerHTML = `<table class="table table-sm"><thead><tr><th>Тип</th><th>Выручка</th></tr></thead><tbody>${data.map(d => `
+                    <tr><td>${d.type}</td><td>${d.total}</td></tr>
+                `).join('')}</tbody></table>`;
+            }
+        } catch (err) {
+            alert('Ошибка: ' + err.message);
+        }
+    });
+}
 
 // ============================================================
-// 9. Моя техника
+// 9. Моя техника (с модалкой)
 // ============================================================
 async function loadMyEquipment() {
+    const container = document.getElementById('myEquipmentList');
+    if (!container) return;
     if (!isAuthenticated()) {
-        document.getElementById('myEquipmentList').innerHTML = '<p>Войдите, чтобы увидеть свою технику</p>';
+        container.innerHTML = '<p>Войдите, чтобы увидеть свою технику</p>';
         return;
     }
     try {
         const items = await fetchAPI('equipment/my');
-        const container = document.getElementById('myEquipmentList');
         if (!items.length) {
             container.innerHTML = '<p class="text-muted">Вы ещё не добавили ни одной единицы техники</p>';
             return;
@@ -643,33 +744,47 @@ async function loadMyEquipment() {
     }
 }
 
+// Открыть модалку для моей техники (создание или редактирование)
 function showMyEquipmentForm(equip = null) {
-    const container = document.getElementById('myEquipmentFormContainer');
-    container.style.display = 'block';
+    const modal = new bootstrap.Modal(document.getElementById('myEquipmentModal'));
+    const title = document.getElementById('myEquipmentModalLabel');
+    const idField = document.getElementById('myEquipmentId');
+    const nameField = document.getElementById('myEquipmentName');
+    const typeIdField = document.getElementById('myEquipmentTypeId');
+    const yearField = document.getElementById('myEquipmentYear');
+    const rateField = document.getElementById('myEquipmentRate');
+    const statusField = document.getElementById('myEquipmentStatus');
+
+    // Загружаем типы для выпадающего списка
     loadMyEquipmentTypes();
+
     if (equip) {
-        document.getElementById('myEquipmentFormTitle').textContent = 'Редактирование техники';
-        document.getElementById('myEquipmentId').value = equip.id;
-        document.getElementById('myEquipmentName').value = equip.name;
-        document.getElementById('myEquipmentTypeId').value = equip.typeId;
-        document.getElementById('myEquipmentYear').value = equip.year;
-        document.getElementById('myEquipmentRate').value = equip.hourlyRate;
-        document.getElementById('myEquipmentStatus').value = equip.status;
+        title.textContent = 'Редактирование техники';
+        idField.value = equip.id;
+        nameField.value = equip.name;
+        typeIdField.value = equip.typeId;
+        yearField.value = equip.year;
+        rateField.value = equip.hourlyRate;
+        statusField.value = equip.status;
     } else {
-        document.getElementById('myEquipmentFormTitle').textContent = 'Добавление техники';
-        document.getElementById('myEquipmentId').value = 0;
+        title.textContent = 'Добавление техники';
+        idField.value = 0;
         document.getElementById('myEquipmentForm').reset();
     }
+    modal.show();
 }
 
+// Закрыть модалку
 function hideMyEquipmentForm() {
-    document.getElementById('myEquipmentFormContainer').style.display = 'none';
+    bootstrap.Modal.getInstance(document.getElementById('myEquipmentModal')).hide();
 }
 
+// Загрузка типов для выпадающего списка
 async function loadMyEquipmentTypes() {
+    const select = document.getElementById('myEquipmentTypeId');
+    if (!select) return;
     try {
         const types = await fetchAPI('equipmenttypes');
-        const select = document.getElementById('myEquipmentTypeId');
         select.innerHTML = '<option value="">Выберите тип</option>';
         types.forEach(t => {
             const opt = document.createElement('option');
@@ -682,33 +797,40 @@ async function loadMyEquipmentTypes() {
     }
 }
 
-document.getElementById('myEquipmentForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const id = parseInt(document.getElementById('myEquipmentId').value);
-    const data = {
-        name: document.getElementById('myEquipmentName').value.trim(),
-        typeId: parseInt(document.getElementById('myEquipmentTypeId').value),
-        year: parseInt(document.getElementById('myEquipmentYear').value),
-        hourlyRate: parseFloat(document.getElementById('myEquipmentRate').value),
-        status: document.getElementById('myEquipmentStatus').value
-    };
-    if (!data.name || isNaN(data.typeId) || isNaN(data.year) || isNaN(data.hourlyRate)) {
-        alert('Заполните все обязательные поля');
-        return;
-    }
-    try {
-        if (id === 0) {
-            await fetchAPI('equipment', { method: 'POST', body: JSON.stringify(data) });
-        } else {
-            await fetchAPI(`equipment/${id}`, { method: 'PUT', body: JSON.stringify({ ...data, id }) });
+// Обработчик формы моей техники
+const myEquipmentForm = document.getElementById('myEquipmentForm');
+if (myEquipmentForm) {
+    // Убираем старый обработчик, чтобы избежать дублирования
+    myEquipmentForm.removeEventListener('submit', myEquipmentForm._listener);
+    myEquipmentForm._listener = async function (e) {
+        e.preventDefault();
+        const id = parseInt(document.getElementById('myEquipmentId').value);
+        const data = {
+            name: document.getElementById('myEquipmentName').value.trim(),
+            typeId: parseInt(document.getElementById('myEquipmentTypeId').value),
+            year: parseInt(document.getElementById('myEquipmentYear').value),
+            hourlyRate: parseFloat(document.getElementById('myEquipmentRate').value),
+            status: document.getElementById('myEquipmentStatus').value
+        };
+        if (!data.name || isNaN(data.typeId) || isNaN(data.year) || isNaN(data.hourlyRate)) {
+            alert('Заполните все обязательные поля');
+            return;
         }
-        hideMyEquipmentForm();
-        loadMyEquipment();
-        loadCatalog();
-    } catch (err) {
-        alert('Ошибка сохранения: ' + err.message);
-    }
-});
+        try {
+            if (id === 0) {
+                await fetchAPI('equipment', { method: 'POST', body: JSON.stringify(data) });
+            } else {
+                await fetchAPI(`equipment/${id}`, { method: 'PUT', body: JSON.stringify({ ...data, id }) });
+            }
+            hideMyEquipmentForm();
+            loadMyEquipment();
+            loadCatalog();
+        } catch (err) {
+            alert('Ошибка сохранения: ' + err.message);
+        }
+    };
+    myEquipmentForm.addEventListener('submit', myEquipmentForm._listener);
+}
 
 async function editMyEquipment(id) {
     try {
@@ -731,84 +853,126 @@ async function deleteMyEquipment(id) {
 }
 
 // ============================================================
-// 10. Админские CRUD (Клиенты, Техника, Бронирования)
+// 10. Админские CRUD (Клиенты, Техника, Бронирования) с модалками
 // ============================================================
+
 // ---------- КЛИЕНТЫ ----------
+let allClients = [];
+let filteredClients = [];
+
 async function loadClients() {
+    const container = document.getElementById('clientsList');
+    if (!container) return;
     if (!isAdmin()) {
-        document.getElementById('clientsList').innerHTML = '<p class="text-muted">Доступно только администратору</p>';
+        container.innerHTML = '<p class="text-muted">Доступно только администратору</p>';
         return;
     }
     try {
         const clients = await fetchAPI('clients');
-        const container = document.getElementById('clientsList');
-        if (!clients.length) {
-            container.innerHTML = '<p class="text-muted">Клиентов пока нет</p>';
-            return;
-        }
-        container.innerHTML = `<ul class="list-group">${clients.map(c => `
-            <li class="list-group-item">
-                <div>
-                    <strong>${c.name}</strong> (${c.phone})<br>
-                    <small>Email: ${c.email || '—'}</small>
-                </div>
-                <div>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editClient(${c.id})"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteClient(${c.id})"><i class="fas fa-trash"></i></button>
-                </div>
-            </li>
-        `).join('')}</ul>`;
+        allClients = clients;
+        filteredClients = [...clients];
+        renderClients();
     } catch (err) {
         alert('Ошибка загрузки клиентов: ' + err.message);
     }
 }
 
+function renderClients() {
+    const container = document.getElementById('clientsList');
+    if (!container) return;
+    if (!filteredClients.length) {
+        container.innerHTML = '<p class="text-muted">Клиентов не найдено</p>';
+        return;
+    }
+    container.innerHTML = `<ul class="list-group">${filteredClients.map(c => `
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+                <strong>${c.name}</strong> (${c.phone})<br>
+                <small>Email: ${c.email || '—'}</small>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-warning me-1" onclick="editClient(${c.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteClient(${c.id})"><i class="fas fa-trash"></i></button>
+            </div>
+        </li>
+    `).join('')}</ul>`;
+}
+
+function applyClientFilters() {
+    const search = document.getElementById('clientSearch')?.value.toLowerCase().trim() || '';
+    filteredClients = allClients.filter(c =>
+        c.name.toLowerCase().includes(search) ||
+        c.phone.includes(search)
+    );
+    renderClients();
+}
+
+function resetClientFilters() {
+    const input = document.getElementById('clientSearch');
+    if (input) input.value = '';
+    filteredClients = [...allClients];
+    renderClients();
+}
+
 function showClientForm(client = null) {
-    const container = document.getElementById('clientFormContainer');
-    container.style.display = 'block';
+    const modal = new bootstrap.Modal(document.getElementById('clientModal'));
+    const title = document.getElementById('clientModalLabel');
+    const idField = document.getElementById('clientId');
+    const nameField = document.getElementById('clientName');
+    const phoneField = document.getElementById('clientPhone');
+    const emailField = document.getElementById('clientEmail');
+    const passportField = document.getElementById('clientPassport');
+
     if (client) {
-        document.getElementById('clientFormTitle').textContent = 'Редактирование клиента';
-        document.getElementById('clientId').value = client.id;
-        document.getElementById('clientName').value = client.name;
-        document.getElementById('clientPhone').value = client.phone;
-        document.getElementById('clientEmail').value = client.email || '';
-        document.getElementById('clientPassport').value = client.passportData || '';
+        title.textContent = 'Редактирование клиента';
+        idField.value = client.id;
+        nameField.value = client.name;
+        phoneField.value = client.phone;
+        emailField.value = client.email || '';
+        passportField.value = client.passportData || '';
     } else {
-        document.getElementById('clientFormTitle').textContent = 'Добавление клиента';
-        document.getElementById('clientId').value = 0;
+        title.textContent = 'Добавление клиента';
+        idField.value = 0;
         document.getElementById('clientForm').reset();
     }
+    modal.show();
 }
 
 function hideClientForm() {
-    document.getElementById('clientFormContainer').style.display = 'none';
+    bootstrap.Modal.getInstance(document.getElementById('clientModal')).hide();
 }
 
-document.getElementById('clientForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const id = parseInt(document.getElementById('clientId').value);
-    const data = {
-        name: document.getElementById('clientName').value.trim(),
-        phone: document.getElementById('clientPhone').value.trim(),
-        email: document.getElementById('clientEmail').value.trim(),
-        passportData: document.getElementById('clientPassport').value.trim()
-    };
-    if (!data.name || !data.phone) {
-        alert('Имя и телефон обязательны');
-        return;
-    }
-    try {
-        if (id === 0) {
-            await fetchAPI('clients', { method: 'POST', body: JSON.stringify(data) });
-        } else {
-            await fetchAPI(`clients/${id}`, { method: 'PUT', body: JSON.stringify({ ...data, id }) });
+const clientForm = document.getElementById('clientForm');
+if (clientForm) {
+    // Убираем старые обработчики, чтобы избежать дублирования
+    clientForm.removeEventListener('submit', clientForm._listener);
+    clientForm._listener = async function (e) {
+        e.preventDefault();
+        const id = parseInt(document.getElementById('clientId').value);
+        const data = {
+            name: document.getElementById('clientName').value.trim(),
+            phone: document.getElementById('clientPhone').value.trim(),
+            email: document.getElementById('clientEmail').value.trim(),
+            passportData: document.getElementById('clientPassport').value.trim()
+        };
+        if (!data.name || !data.phone) {
+            alert('Имя и телефон обязательны');
+            return;
         }
-        hideClientForm();
-        loadClients();
-    } catch (err) {
-        alert('Ошибка сохранения: ' + err.message);
-    }
-});
+        try {
+            if (id === 0) {
+                await fetchAPI('clients', { method: 'POST', body: JSON.stringify(data) });
+            } else {
+                await fetchAPI(`clients/${id}`, { method: 'PUT', body: JSON.stringify({ ...data, id }) });
+            }
+            hideClientForm();
+            loadClients();
+        } catch (err) {
+            alert('Ошибка сохранения: ' + err.message);
+        }
+    };
+    clientForm.addEventListener('submit', clientForm._listener);
+}
 
 async function editClient(id) {
     try {
@@ -830,84 +994,146 @@ async function deleteClient(id) {
 }
 
 // ---------- ТЕХНИКА (админ) ----------
+let allEquipmentAdmin = [];
+let filteredEquipmentAdmin = [];
+
 async function loadEquipment() {
+    const container = document.getElementById('equipmentList');
+    if (!container) return;
     if (!isAdmin()) {
-        document.getElementById('equipmentList').innerHTML = '<p class="text-muted">Доступно только администратору</p>';
+        container.innerHTML = '<p class="text-muted">Доступно только администратору</p>';
         return;
     }
     try {
         const items = await fetchAPI('equipment');
-        const container = document.getElementById('equipmentList');
-        if (!items.length) {
-            container.innerHTML = '<p class="text-muted">Техники пока нет</p>';
-            return;
+        allEquipmentAdmin = items;
+        filteredEquipmentAdmin = [...items];
+        renderEquipmentAdmin();
+        // Заполняем выпадающий список типов для фильтра
+        const types = await fetchAPI('equipmenttypes');
+        const typeSelect = document.getElementById('eqTypeFilter');
+        if (typeSelect) {
+            typeSelect.innerHTML = '<option value="">Все типы</option>';
+            types.forEach(t => {
+                const opt = document.createElement('option');
+                opt.value = t.id;
+                opt.text = t.name;
+                typeSelect.appendChild(opt);
+            });
         }
-        container.innerHTML = `<ul class="list-group">${items.map(e => `
-            <li class="list-group-item">
-                <div>
-                    <strong>${e.name}</strong> (${e.year})<br>
-                    <small>Ставка: ${e.hourlyRate} руб/час, Статус: ${e.status}</small>
-                </div>
-                <div>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editEquipment(${e.id})"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteEquipment(${e.id})"><i class="fas fa-trash"></i></button>
-                </div>
-            </li>
-        `).join('')}</ul>`;
     } catch (err) {
         alert('Ошибка загрузки техники: ' + err.message);
     }
 }
 
+function renderEquipmentAdmin() {
+    const container = document.getElementById('equipmentList');
+    if (!container) return;
+    if (!filteredEquipmentAdmin.length) {
+        container.innerHTML = '<p class="text-muted">Техника не найдена</p>';
+        return;
+    }
+    container.innerHTML = `<ul class="list-group">${filteredEquipmentAdmin.map(e => `
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+                <strong>${e.name}</strong> (${e.year})<br>
+                <small>Ставка: ${e.hourlyRate} руб/час, Статус: ${e.status}</small>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-warning me-1" onclick="editEquipment(${e.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteEquipment(${e.id})"><i class="fas fa-trash"></i></button>
+            </div>
+        </li>
+    `).join('')}</ul>`;
+}
+
+function applyEquipmentFilters() {
+    const search = document.getElementById('eqSearch')?.value.toLowerCase().trim() || '';
+    const typeId = document.getElementById('eqTypeFilter')?.value || '';
+    const status = document.getElementById('eqStatusFilter')?.value || '';
+    filteredEquipmentAdmin = allEquipmentAdmin.filter(e => {
+        let match = true;
+        if (search) match = match && e.name.toLowerCase().includes(search);
+        if (typeId) match = match && e.typeId == typeId;
+        if (status) match = match && e.status === status;
+        return match;
+    });
+    renderEquipmentAdmin();
+}
+
+function resetEquipmentFilters() {
+    const search = document.getElementById('eqSearch');
+    const type = document.getElementById('eqTypeFilter');
+    const status = document.getElementById('eqStatusFilter');
+    if (search) search.value = '';
+    if (type) type.value = '';
+    if (status) status.value = '';
+    filteredEquipmentAdmin = [...allEquipmentAdmin];
+    renderEquipmentAdmin();
+}
+
 function showEquipmentForm(equip = null) {
-    const container = document.getElementById('equipmentFormContainer');
-    container.style.display = 'block';
+    const modal = new bootstrap.Modal(document.getElementById('equipmentModalAdmin'));
+    const title = document.getElementById('equipmentModalAdminLabel');
+    const idField = document.getElementById('equipmentId');
+    const nameField = document.getElementById('equipmentName');
+    const typeIdField = document.getElementById('equipmentTypeId');
+    const yearField = document.getElementById('equipmentYear');
+    const rateField = document.getElementById('equipmentRate');
+    const statusField = document.getElementById('equipmentStatus');
+
     if (equip) {
-        document.getElementById('equipmentFormTitle').textContent = 'Редактирование техники';
-        document.getElementById('equipmentId').value = equip.id;
-        document.getElementById('equipmentName').value = equip.name;
-        document.getElementById('equipmentTypeId').value = equip.typeId;
-        document.getElementById('equipmentYear').value = equip.year;
-        document.getElementById('equipmentRate').value = equip.hourlyRate;
-        document.getElementById('equipmentStatus').value = equip.status;
+        title.textContent = 'Редактирование техники';
+        idField.value = equip.id;
+        nameField.value = equip.name;
+        typeIdField.value = equip.typeId;
+        yearField.value = equip.year;
+        rateField.value = equip.hourlyRate;
+        statusField.value = equip.status;
     } else {
-        document.getElementById('equipmentFormTitle').textContent = 'Добавление техники';
-        document.getElementById('equipmentId').value = 0;
+        title.textContent = 'Добавление техники';
+        idField.value = 0;
         document.getElementById('equipmentForm').reset();
     }
+    modal.show();
 }
 
 function hideEquipmentForm() {
-    document.getElementById('equipmentFormContainer').style.display = 'none';
+    bootstrap.Modal.getInstance(document.getElementById('equipmentModalAdmin')).hide();
 }
 
-document.getElementById('equipmentForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const id = parseInt(document.getElementById('equipmentId').value);
-    const data = {
-        name: document.getElementById('equipmentName').value.trim(),
-        typeId: parseInt(document.getElementById('equipmentTypeId').value),
-        year: parseInt(document.getElementById('equipmentYear').value),
-        hourlyRate: parseFloat(document.getElementById('equipmentRate').value),
-        status: document.getElementById('equipmentStatus').value
-    };
-    if (!data.name || isNaN(data.typeId) || isNaN(data.year) || isNaN(data.hourlyRate)) {
-        alert('Заполните все обязательные поля');
-        return;
-    }
-    try {
-        if (id === 0) {
-            await fetchAPI('equipment', { method: 'POST', body: JSON.stringify(data) });
-        } else {
-            await fetchAPI(`equipment/${id}`, { method: 'PUT', body: JSON.stringify({ ...data, id }) });
+const equipmentForm = document.getElementById('equipmentForm');
+if (equipmentForm) {
+    equipmentForm.removeEventListener('submit', equipmentForm._listener);
+    equipmentForm._listener = async function (e) {
+        e.preventDefault();
+        const id = parseInt(document.getElementById('equipmentId').value);
+        const data = {
+            name: document.getElementById('equipmentName').value.trim(),
+            typeId: parseInt(document.getElementById('equipmentTypeId').value),
+            year: parseInt(document.getElementById('equipmentYear').value),
+            hourlyRate: parseFloat(document.getElementById('equipmentRate').value),
+            status: document.getElementById('equipmentStatus').value
+        };
+        if (!data.name || isNaN(data.typeId) || isNaN(data.year) || isNaN(data.hourlyRate)) {
+            alert('Заполните все обязательные поля');
+            return;
         }
-        hideEquipmentForm();
-        loadEquipment();
-        loadCatalog();
-    } catch (err) {
-        alert('Ошибка сохранения: ' + err.message);
-    }
-});
+        try {
+            if (id === 0) {
+                await fetchAPI('equipment', { method: 'POST', body: JSON.stringify(data) });
+            } else {
+                await fetchAPI(`equipment/${id}`, { method: 'PUT', body: JSON.stringify({ ...data, id }) });
+            }
+            hideEquipmentForm();
+            loadEquipment();
+            loadCatalog();
+        } catch (err) {
+            alert('Ошибка сохранения: ' + err.message);
+        }
+    };
+    equipmentForm.addEventListener('submit', equipmentForm._listener);
+}
 
 async function editEquipment(id) {
     try {
@@ -930,66 +1156,168 @@ async function deleteEquipment(id) {
 }
 
 // ---------- БРОНИРОВАНИЯ (админ) ----------
+let allRentals = [];
+let filteredRentals = [];
+
 async function loadRentals() {
+    const container = document.getElementById('rentalsList');
+    if (!container) return;
     if (!isAdmin()) {
-        document.getElementById('rentalsList').innerHTML = '<p class="text-muted">Доступно только администратору</p>';
+        container.innerHTML = '<p class="text-muted">Доступно только администратору</p>';
         return;
     }
     try {
         const rentals = await fetchAPI('rentals');
-        const container = document.getElementById('rentalsList');
-        if (!rentals.length) {
-            container.innerHTML = '<p class="text-muted">Бронирований пока нет</p>';
-            return;
-        }
-        container.innerHTML = `<ul class="list-group">${rentals.map(r => `
-            <li class="list-group-item">
-                <div>
-                    <strong>Бронь #${r.id}</strong> — клиент ${r.clientId}, техника ${r.equipmentId}<br>
-                    <small>С ${new Date(r.startDate).toLocaleString()} по ${new Date(r.endDate).toLocaleString()}</small><br>
-                    <span class="badge bg-secondary">Статус: ${r.status}</span>
-                    <span class="badge bg-success">Стоимость: ${r.totalCost} руб</span>
-                </div>
-                <div>
-                    <button class="btn btn-sm btn-danger" onclick="deleteRental(${r.id})"><i class="fas fa-trash"></i></button>
-                </div>
-            </li>
-        `).join('')}</ul>`;
+        allRentals = rentals;
+        filteredRentals = [...rentals];
+        renderRentals();
     } catch (err) {
         alert('Ошибка загрузки бронирований: ' + err.message);
     }
 }
 
-function showRentalForm() {
-    document.getElementById('rentalFormContainer').style.display = 'block';
-    document.getElementById('rentalForm').reset();
+function renderRentals() {
+    const container = document.getElementById('rentalsList');
+    if (!container) return;
+    if (!filteredRentals.length) {
+        container.innerHTML = '<p class="text-muted">Бронирований не найдено</p>';
+        return;
+    }
+    container.innerHTML = `<ul class="list-group">${filteredRentals.map(r => `
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+                <strong>Бронь #${r.id}</strong> — клиент: ${r.clientName} (${r.clientId}), техника: ${r.equipmentName} (${r.equipmentId})<br>
+                <small>С ${new Date(r.startDate).toLocaleString()} по ${new Date(r.endDate).toLocaleString()}</small><br>
+                <span class="badge bg-secondary">Статус: ${r.status}</span>
+                <span class="badge bg-success">Стоимость: ${r.totalCost} руб</span>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-warning me-1" onclick="editRental(${r.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteRental(${r.id})"><i class="fas fa-trash"></i></button>
+            </div>
+        </li>
+    `).join('')}</ul>`;
+}
+
+function applyRentalFilters() {
+    const search = document.getElementById('rentalSearch')?.value.toLowerCase().trim() || '';
+    const status = document.getElementById('rentalStatusFilter')?.value || '';
+    const dateFrom = document.getElementById('rentalDateFrom')?.value || '';
+    const dateTo = document.getElementById('rentalDateTo')?.value || '';
+    filteredRentals = allRentals.filter(r => {
+        let match = true;
+        if (search) {
+            match = match && (r.clientName.toLowerCase().includes(search) || r.equipmentName.toLowerCase().includes(search));
+        }
+        if (status) match = match && r.status === status;
+        if (dateFrom) {
+            const d = new Date(r.startDate);
+            const filterDate = new Date(dateFrom);
+            match = match && d >= filterDate;
+        }
+        if (dateTo) {
+            const d = new Date(r.endDate);
+            const filterDate = new Date(dateTo);
+            match = match && d <= filterDate;
+        }
+        return match;
+    });
+    renderRentals();
+}
+
+function resetRentalFilters() {
+    const search = document.getElementById('rentalSearch');
+    const status = document.getElementById('rentalStatusFilter');
+    const from = document.getElementById('rentalDateFrom');
+    const to = document.getElementById('rentalDateTo');
+    if (search) search.value = '';
+    if (status) status.value = '';
+    if (from) from.value = '';
+    if (to) to.value = '';
+    filteredRentals = [...allRentals];
+    renderRentals();
+}
+
+function showRentalForm(rental = null) {
+    const modal = new bootstrap.Modal(document.getElementById('rentalModal'));
+    const title = document.getElementById('rentalModalLabel');
+    const idField = document.getElementById('rentalId');
+    const clientIdField = document.getElementById('rentalClientId');
+    const equipmentIdField = document.getElementById('rentalEquipmentId');
+    const startField = document.getElementById('rentalStart');
+    const endField = document.getElementById('rentalEnd');
+    const statusField = document.getElementById('rentalStatus');
+
+    if (rental) {
+        title.textContent = 'Редактирование бронирования';
+        idField.value = rental.id;
+        clientIdField.value = rental.clientId;
+        equipmentIdField.value = rental.equipmentId;
+        startField.value = new Date(rental.startDate).toISOString().slice(0, 16);
+        endField.value = new Date(rental.endDate).toISOString().slice(0, 16);
+        statusField.value = rental.status;
+    } else {
+        title.textContent = 'Создание бронирования';
+        idField.value = 0;
+        document.getElementById('rentalForm').reset();
+        statusField.value = 'активно';
+    }
+    modal.show();
 }
 
 function hideRentalForm() {
-    document.getElementById('rentalFormContainer').style.display = 'none';
+    bootstrap.Modal.getInstance(document.getElementById('rentalModal')).hide();
 }
 
-document.getElementById('rentalForm').addEventListener('submit', async function (e) {
-    e.preventDefault();
-    const data = {
-        clientId: parseInt(document.getElementById('rentalClientId').value),
-        equipmentId: parseInt(document.getElementById('rentalEquipmentId').value),
-        startDate: new Date(document.getElementById('rentalStart').value).toISOString(),
-        endDate: new Date(document.getElementById('rentalEnd').value).toISOString()
+const rentalForm = document.getElementById('rentalForm');
+if (rentalForm) {
+    rentalForm.removeEventListener('submit', rentalForm._listener);
+    rentalForm._listener = async function (e) {
+        e.preventDefault();
+        const id = parseInt(document.getElementById('rentalId').value);
+        const data = {
+            clientId: parseInt(document.getElementById('rentalClientId').value),
+            equipmentId: parseInt(document.getElementById('rentalEquipmentId').value),
+            startDate: new Date(document.getElementById('rentalStart').value).toISOString(),
+            endDate: new Date(document.getElementById('rentalEnd').value).toISOString(),
+            status: document.getElementById('rentalStatus').value
+        };
+        if (isNaN(data.clientId) || isNaN(data.equipmentId) || !data.startDate || !data.endDate) {
+            alert('Заполните все поля');
+            return;
+        }
+        try {
+            if (id === 0) {
+                const createData = {
+                    clientId: data.clientId,
+                    equipmentId: data.equipmentId,
+                    startDate: data.startDate,
+                    endDate: data.endDate
+                };
+                await fetchAPI('rentals', { method: 'POST', body: JSON.stringify(createData) });
+            } else {
+                const existing = await fetchAPI(`rentals/${id}`);
+                const updated = { ...existing, ...data };
+                await fetchAPI(`rentals/${id}`, { method: 'PUT', body: JSON.stringify(updated) });
+            }
+            hideRentalForm();
+            loadRentals();
+            loadCatalog();
+        } catch (err) {
+            alert('Ошибка сохранения: ' + err.message);
+        }
     };
-    if (isNaN(data.clientId) || isNaN(data.equipmentId) || !data.startDate || !data.endDate) {
-        alert('Заполните все поля');
-        return;
-    }
+    rentalForm.addEventListener('submit', rentalForm._listener);
+}
+
+async function editRental(id) {
     try {
-        await fetchAPI('rentals', { method: 'POST', body: JSON.stringify(data) });
-        hideRentalForm();
-        loadRentals();
-        loadCatalog();
+        const rental = await fetchAPI(`rentals/${id}`);
+        showRentalForm(rental);
     } catch (err) {
-        alert('Ошибка создания бронирования: ' + err.message);
+        alert('Ошибка загрузки бронирования: ' + err.message);
     }
-});
+}
 
 async function deleteRental(id) {
     if (!confirm('Удалить бронирование?')) return;
@@ -1003,38 +1331,34 @@ async function deleteRental(id) {
 }
 
 // ============================================================
-// 11. Инициализация
+// 11. Инициализация при загрузке страницы
 // ============================================================
 document.addEventListener('DOMContentLoaded', function () {
+    currentPageName = getCurrentPage();
     updateAuthUI();
+    loadPageData();
 
-    // Загружаем каталог
-    loadFilterTypes();
-    loadCatalog();
+    const sortSelect = document.getElementById('sortSelect');
+    if (sortSelect) {
+        sortSelect.addEventListener('change', applyFilters);
+    }
 
-    // Загружаем остальные вкладки (данные подгрузятся по мере активации)
-    loadMyRentals();
-    loadMyEquipment();
-    loadAnalytics();
-    loadClients();
-    loadEquipment();
-    loadRentals();
+    const searchInput = document.getElementById('searchInput');
+    if (searchInput) {
+        searchInput.addEventListener('keyup', function (e) {
+            if (e.key === 'Enter') applyFilters();
+        });
+    }
 
-    // Сортировка
-    document.getElementById('sortSelect').addEventListener('change', applyFilters);
-    // Кнопка поиска
-    document.getElementById('searchInput').addEventListener('keyup', function (e) {
-        if (e.key === 'Enter') applyFilters();
-    });
+    const authToggle = document.getElementById('authToggle');
+    if (authToggle) {
+        authToggle.addEventListener('click', toggleAuthMode);
+    }
 
-    // Подгрузка опций для оплаты и оценки при активации вкладки "Личный кабинет"
-    document.getElementById('profile-tab').addEventListener('shown.bs.tab', function () {
-        loadPaymentOptions();
-        loadRatingOptions();
-    });
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) {
+        logoutBtn.addEventListener('click', logout);
+    }
 
-    // Подгрузка типов для "Моя техника" при активации вкладки
-    document.getElementById('myEquipment-tab').addEventListener('shown.bs.tab', function () {
-        loadMyEquipmentTypes();
-    });
+    console.log('Приложение инициализировано. Страница:', currentPageName);
 });
