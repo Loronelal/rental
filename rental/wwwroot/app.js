@@ -682,6 +682,9 @@ async function loadAnalytics() {
     } catch (err) {
         alert('Ошибка загрузки аналитики: ' + err.message);
     }
+
+    loadForecastTypes();
+    setDefaultForecastDates();
 }
 
 const revenueForm = document.getElementById('revenueForm');
@@ -1329,6 +1332,121 @@ async function deleteRental(id) {
         alert('Ошибка удаления: ' + err.message);
     }
 }
+
+// ============================================================
+// 12. Прогнозирование спроса (модель Хольта-Уинтерса)
+// ============================================================
+
+// Загрузка типов для фильтра прогноза
+async function loadForecastTypes() {
+    const select = document.getElementById('forecastType');
+    if (!select) return;
+    try {
+        const types = await fetchAPI('equipmenttypes');
+        select.innerHTML = '<option value="">Все типы</option>';
+        types.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.id;
+            opt.text = t.name;
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        console.error('Ошибка загрузки типов для прогноза:', e);
+    }
+}
+
+// Установка дат по умолчанию (завтра + 30 дней)
+function setDefaultForecastDates() {
+    const start = document.getElementById('forecastStart');
+    const end = document.getElementById('forecastEnd');
+    if (start && end) {
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(now.getDate() + 1);
+        const in30Days = new Date(now);
+        in30Days.setDate(now.getDate() + 30);
+        start.value = tomorrow.toISOString().split('T')[0];
+        end.value = in30Days.toISOString().split('T')[0];
+    }
+}
+
+// Обработчик формы прогноза
+const forecastForm = document.getElementById('forecastForm');
+if (forecastForm) {
+    forecastForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const start = document.getElementById('forecastStart').value;
+        const end = document.getElementById('forecastEnd').value;
+        const typeId = document.getElementById('forecastType').value;
+        const alpha = parseFloat(document.getElementById('forecastAlpha').value) || 0.3;
+        const beta = parseFloat(document.getElementById('forecastBeta').value) || 0.1;
+        const gamma = parseFloat(document.getElementById('forecastGamma').value) || 0.3;
+
+        if (!start || !end) {
+            alert('Укажите даты');
+            return;
+        }
+
+        try {
+            let url = `forecast/holt-winters?startDate=${encodeURIComponent(start)}&endDate=${encodeURIComponent(end)}`;
+            url += `&alpha=${alpha}&beta=${beta}&gamma=${gamma}`;
+            if (typeId) url += `&equipmentTypeId=${typeId}`;
+
+            const data = await fetchAPI(url);
+            const tableContainer = document.getElementById('forecastTable');
+
+            if (!data || !data.length) {
+                tableContainer.innerHTML = '<p class="text-muted">Нет данных для прогноза</p>';
+                return;
+            }
+
+            // Таблица
+            let tableHtml = `<table class="table table-sm table-striped"><thead><tr><th>Дата</th><th>Прогноз аренд</th></tr></thead><tbody>`;
+            data.forEach(item => {
+                const date = new Date(item.date).toLocaleDateString();
+                tableHtml += `<tr><td>${date}</td><td>${item.predictedRentals.toFixed(1)}</td></tr>`;
+            });
+            tableHtml += '</tbody></table>';
+            tableContainer.innerHTML = tableHtml;
+
+            // График
+            const ctx = document.getElementById('forecastChart').getContext('2d');
+            if (window.forecastChartInstance) {
+                window.forecastChartInstance.destroy();
+            }
+            const labels = data.map(item => new Date(item.date).toLocaleDateString());
+            const values = data.map(item => item.predictedRentals);
+            window.forecastChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Прогнозируемое количество аренд',
+                        data: values,
+                        borderColor: 'rgb(75, 192, 192)',
+                        tension: 0.1,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: true }
+                    },
+                    scales: {
+                        x: { display: true, title: { display: true, text: 'Дата' } },
+                        y: { display: true, title: { display: true, text: 'Количество аренд' }, beginAtZero: true }
+                    }
+                }
+            });
+        } catch (err) {
+            alert('Ошибка загрузки прогноза: ' + err.message);
+        }
+    });
+}
+
+
 
 // ============================================================
 // 11. Инициализация при загрузке страницы

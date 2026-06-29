@@ -1,7 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using rental.Entities;
 using rental.Data;
+using rental.Entities;
+using System.Security.Claims;
 
 namespace rental.Controllers;
 
@@ -62,15 +63,48 @@ public class EquipmentRatingsController : ControllerBase
     [HttpPost("rate")]
     public async Task<IActionResult> RateEquipment(int equipmentId, int rating)
     {
-        if (rating < 1 || rating > 5) return BadRequest("Рейтинг должен быть от 1 до 5");
+        if (rating < 1 || rating > 5)
+            return BadRequest("Рейтинг должен быть от 1 до 5");
+
+        // 1. Получаем ID текущего пользователя из токена
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized("Пользователь не авторизован");
+
+        int clientId = int.Parse(userId);
+
+        // 2. Проверяем, что пользователь действительно арендовал эту технику и аренда завершена
+        var hasCompletedRental = await _context.Rentals
+            .AnyAsync(r => r.ClientId == clientId
+                           && r.EquipmentId == equipmentId
+                           && r.Status == "завершено");
+
+        if (!hasCompletedRental)
+            return BadRequest("Вы не можете оценить эту технику, так как у вас нет завершённой аренды.");
+
+        // 3. Получаем или создаём запись рейтинга для данной техники
         var eqRating = await _context.EquipmentRatings.FindAsync(equipmentId);
-        if (eqRating == null) return NotFound();
-        // Обновляем средний рейтинг (можно взвешенное обновление)
-        var total = eqRating.AvgRating * eqRating.RentalCount + rating;
-        eqRating.RentalCount += 1;
-        eqRating.AvgRating = total / eqRating.RentalCount;
+        if (eqRating == null)
+        {
+            // Если записи нет, создаём новую
+            eqRating = new EquipmentRating
+            {
+                EquipmentId = equipmentId,
+                AvgRating = rating,
+                RentalCount = 1
+            };
+            _context.EquipmentRatings.Add(eqRating);
+        }
+        else
+        {
+            // Обновляем средний рейтинг
+            var total = eqRating.AvgRating * eqRating.RentalCount + rating;
+            eqRating.RentalCount += 1;
+            eqRating.AvgRating = total / eqRating.RentalCount;
+        }
+
         await _context.SaveChangesAsync();
-        return Ok();
+        return Ok(new { message = "Оценка сохранена", newAvg = eqRating.AvgRating });
     }
 
 
