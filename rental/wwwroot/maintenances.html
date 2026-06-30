@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Моя техника — RentTech</title>
+    <title>ТО — RentTech</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
@@ -36,69 +36,86 @@
                 <li class="nav-item"><a class="nav-link" href="catalog.html">Каталог</a></li>
                 <li class="nav-item"><a class="nav-link" href="profile.html">Личный кабинет</a></li>
                 <li class="nav-item"><a class="nav-link" href="analytics.html">Аналитика</a></li>
-                <li class="nav-item"><a class="nav-link active" href="myEquipment.html">Моя техника</a></li>
+                <li class="nav-item"><a class="nav-link" href="myEquipment.html">Моя техника</a></li>
                 <li class="nav-item admin-tab"><a class="nav-link" href="clients.html">Клиенты</a></li>
                 <li class="nav-item admin-tab"><a class="nav-link" href="equipment.html">Техника</a></li>
                 <li class="nav-item admin-tab"><a class="nav-link" href="rentals.html">Бронирования</a></li>
-                <li class="nav-item admin-tab"><a class="nav-link" href="maintenances.html">ТО</a></li>
+                <li class="nav-item admin-tab"><a class="nav-link active" href="maintenances.html">ТО</a></li>
             </ul>
         </div>
 
         <!-- ОСНОВНОЙ КОНТЕНТ -->
         <div class="container-custom mt-3">
             <div class="d-flex justify-content-between mb-3">
-                <h3>Моя техника</h3>
-                <button class="btn btn-primary" onclick="showMyEquipmentForm()"><i class="fas fa-plus"></i> Добавить технику</button>
+                <h3>Управление ТО</h3>
+                <button class="btn btn-primary" onclick="showMaintenanceForm()"><i class="fas fa-plus"></i> Добавить ТО</button>
             </div>
 
-            <!-- ПОЛЕ ПОИСКА -->
+            <!-- Фильтры -->
             <div class="row mb-3">
-                <div class="col-md-6">
-                    <input type="text" id="myEquipmentSearch" class="form-control" placeholder="Поиск по названию или типу...">
+                <div class="col-md-3">
+                    <select id="maintenanceEquipmentFilter" class="form-select">
+                        <option value="">Все техника</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <select id="maintenanceTypeFilter" class="form-select">
+                        <option value="">Все типы</option>
+                        <option value="плановое">Плановое</option>
+                        <option value="аварийное">Аварийное</option>
+                    </select>
                 </div>
                 <div class="col-md-2">
-                    <button class="btn btn-primary w-100" onclick="applyMyEquipmentFilter()"><i class="fas fa-search"></i> Найти</button>
+                    <input type="date" id="maintenanceDateFrom" class="form-control" placeholder="С даты">
                 </div>
                 <div class="col-md-2">
-                    <button class="btn btn-secondary w-100" onclick="resetMyEquipmentFilter()">Сбросить</button>
+                    <input type="date" id="maintenanceDateTo" class="form-control" placeholder="По дату">
+                </div>
+                <div class="col-md-2">
+                    <button class="btn btn-primary w-100" onclick="applyMaintenanceFilters()"><i class="fas fa-filter"></i> Применить</button>
+                    <button class="btn btn-secondary w-100 mt-1" onclick="resetMaintenanceFilters()">Сбросить</button>
                 </div>
             </div>
 
-            <div id="myEquipmentList"></div>
+            <div id="maintenancesList"></div>
         </div>
     </div>
 
-    <!-- МОДАЛКА ДЛЯ МОЕЙ ТЕХНИКИ -->
-    <div class="modal fade" id="myEquipmentModal" tabindex="-1" aria-hidden="true">
+    <!-- МОДАЛКА ДЛЯ ТО -->
+    <div class="modal fade" id="maintenanceModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title" id="myEquipmentModalLabel">Добавление техники</h5>
+                    <h5 class="modal-title" id="maintenanceModalLabel">Добавление ТО</h5>
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="myEquipmentForm">
-                        <input type="hidden" id="myEquipmentId" value="0">
-                        <div class="mb-2"><label>Название</label><input type="text" id="myEquipmentName" class="form-control" required></div>
+                    <form id="maintenanceForm">
+                        <input type="hidden" id="maintenanceId" value="0">
+                        <div class="mb-2">
+                            <label>Техника</label>
+                            <select id="maintenanceEquipmentId" class="form-select" required>
+                                <option value="">Выберите технику</option>
+                            </select>
+                        </div>
+                        <div class="mb-2">
+                            <label>Дата начала</label>
+                            <input type="datetime-local" id="maintenanceStart" class="form-control" required>
+                        </div>
+                        <div class="mb-2">
+                            <label>Дата окончания</label>
+                            <input type="datetime-local" id="maintenanceEnd" class="form-control" required>
+                        </div>
                         <div class="mb-2">
                             <label>Тип</label>
-                            <select id="myEquipmentTypeId" class="form-select" required>
-                                <option value="">Выберите тип</option>
-                            </select>
-                        </div>
-                        <div class="mb-2"><label>Год выпуска</label><input type="number" id="myEquipmentYear" class="form-control" required></div>
-                        <div class="mb-2"><label>Стоимость аренды (час)</label><input type="number" step="0.01" id="myEquipmentRate" class="form-control" required></div>
-                        <div class="mb-2">
-                            <label>Статус</label>
-                            <select id="myEquipmentStatus" class="form-select">
-                                <option value="доступен">Доступен</option>
-                                <option value="в аренде">В аренде</option>
-                                <option value="на обслуживании">На обслуживании</option>
+                            <select id="maintenanceType" class="form-select">
+                                <option value="плановое">Плановое</option>
+                                <option value="аварийное">Аварийное</option>
                             </select>
                         </div>
                         <div class="mb-2">
-                            <label>Дата последнего ТО</label>
-                            <input type="date" id="myEquipmentLastMaintenanceDate" class="form-control">
+                            <label>Стоимость</label>
+                            <input type="number" step="0.01" id="maintenanceCost" class="form-control" required>
                         </div>
                         <button type="submit" class="btn btn-success">Сохранить</button>
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>

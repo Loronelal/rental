@@ -20,12 +20,11 @@ public class EquipmentController : ControllerBase
 
     // GET: api/equipment (публичный каталог с фильтрацией)
     [HttpGet]
-    [HttpGet]
     public async Task<ActionResult<IEnumerable<EquipmentDto>>> GetEquipment(
-    [FromQuery] int? typeId,
-    [FromQuery] int? yearFrom,
-    [FromQuery] decimal? priceTo,
-    [FromQuery] string? status)
+        [FromQuery] int? typeId,
+        [FromQuery] int? yearFrom,
+        [FromQuery] decimal? priceTo,
+        [FromQuery] string? status)
     {
         var query = _context.Equipment
             .Include(e => e.Type)
@@ -49,14 +48,15 @@ public class EquipmentController : ControllerBase
                 Name = e.Name,
                 TypeId = e.TypeId,
                 TypeName = e.Type.Name,
-                TypeImageUrl = e.Type.ImageUrl,   // <-- ключевое поле
+                TypeImageUrl = e.Type.ImageUrl,
                 Year = e.Year,
                 HourlyRate = e.HourlyRate,
                 Status = e.Status,
                 AvgRating = e.Rating != null ? e.Rating.AvgRating : 0,
                 RentalCount = e.Rating != null ? e.Rating.RentalCount : 0,
                 OwnerName = e.Owner != null ? e.Owner.Name : "",
-                OwnerId = e.OwnerId
+                OwnerId = e.OwnerId,
+                LastMaintenanceDate = e.LastMaintenanceDate  // новое поле
             })
             .ToListAsync();
 
@@ -106,9 +106,9 @@ public class EquipmentController : ControllerBase
     // GET: api/equipment/available
     [HttpGet("available")]
     public async Task<ActionResult<IEnumerable<EquipmentDto>>> GetAvailable(
-        [FromQuery] int? typeId,
-        [FromQuery] DateTime start,
-        [FromQuery] DateTime end)
+    [FromQuery] int? typeId,
+    [FromQuery] DateTime start,
+    [FromQuery] DateTime end)
     {
         DateTime startUtc = DateTime.SpecifyKind(start, DateTimeKind.Utc);
         DateTime endUtc = DateTime.SpecifyKind(end, DateTimeKind.Utc);
@@ -125,7 +125,7 @@ public class EquipmentController : ControllerBase
             .ToListAsync();
 
         var query = _context.Equipment
-            .Where(e => e.Status == "доступен" && !busyIds.Contains(e.Id))
+            .Where(e => e.Status != "на обслуживании" && !busyIds.Contains(e.Id))
             .Include(e => e.Type)
             .Include(e => e.Rating)
             .Include(e => e.Owner)
@@ -148,7 +148,8 @@ public class EquipmentController : ControllerBase
                 AvgRating = e.Rating != null ? e.Rating.AvgRating : 0,
                 RentalCount = e.Rating != null ? e.Rating.RentalCount : 0,
                 OwnerName = e.Owner != null ? e.Owner.Name : "",
-                OwnerId = e.OwnerId
+                OwnerId = e.OwnerId,
+                LastMaintenanceDate = e.LastMaintenanceDate
             })
             .ToListAsync();
 
@@ -210,7 +211,8 @@ public class EquipmentController : ControllerBase
             AvgRating = equipment.Rating?.AvgRating ?? 0,
             RentalCount = equipment.Rating?.RentalCount ?? 0,
             OwnerName = equipment.Owner?.Name ?? "",
-            OwnerId = equipment.OwnerId
+            OwnerId = equipment.OwnerId,
+            LastMaintenanceDate = equipment.LastMaintenanceDate  // новое поле
         };
 
         return Ok(dto);
@@ -221,12 +223,10 @@ public class EquipmentController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Equipment>> PostEquipment(Equipment equipment)
     {
-        // Проверяем существование типа
         var typeExists = await _context.EquipmentTypes.AnyAsync(t => t.Id == equipment.TypeId);
         if (!typeExists)
             return BadRequest("Указанный тип техники не существует");
 
-        // Установка владельца
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
@@ -245,9 +245,13 @@ public class EquipmentController : ControllerBase
         else
         {
             // Админ может указать OwnerId в теле запроса, иначе ставит себя
-            if (equipment.OwnerId == 0)
+            if (!equipment.OwnerId.HasValue || equipment.OwnerId == 0)
                 equipment.OwnerId = currentUserId;
         }
+
+        // Приводим дату последнего ТО к UTC, если она передана
+        if (equipment.LastMaintenanceDate.HasValue)
+            equipment.LastMaintenanceDate = DateTime.SpecifyKind(equipment.LastMaintenanceDate.Value, DateTimeKind.Utc);
 
         _context.Equipment.Add(equipment);
         await _context.SaveChangesAsync();
@@ -273,7 +277,6 @@ public class EquipmentController : ControllerBase
         if (id != equipment.Id)
             return BadRequest();
 
-        // Получаем текущего пользователя
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
@@ -281,26 +284,28 @@ public class EquipmentController : ControllerBase
         int currentUserId = int.Parse(userId);
         var currentUser = await _context.Clients.FindAsync(currentUserId);
 
-        // Получаем существующую технику
         var existing = await _context.Equipment.FindAsync(id);
         if (existing == null)
             return NotFound();
 
-        // Проверяем права: владелец или админ
         if (existing.OwnerId != currentUserId && currentUser?.Role != "Admin")
             return Forbid("Вы не являетесь владельцем этой техники");
 
-        // Проверяем тип
         var typeExists = await _context.EquipmentTypes.AnyAsync(t => t.Id == equipment.TypeId);
         if (!typeExists)
             return BadRequest("Указанный тип техники не существует");
 
-        // Обновляем только разрешённые поля (кроме OwnerId)
         existing.Name = equipment.Name;
         existing.TypeId = equipment.TypeId;
         existing.Year = equipment.Year;
         existing.HourlyRate = equipment.HourlyRate;
         existing.Status = equipment.Status;
+
+        // Приводим дату последнего ТО к UTC, если она передана
+        if (equipment.LastMaintenanceDate.HasValue)
+            existing.LastMaintenanceDate = DateTime.SpecifyKind(equipment.LastMaintenanceDate.Value, DateTimeKind.Utc);
+        else
+            existing.LastMaintenanceDate = null;
 
         _context.Entry(existing).State = EntityState.Modified;
         try
@@ -322,7 +327,10 @@ public class EquipmentController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteEquipment(int id)
     {
-        var equipment = await _context.Equipment.FindAsync(id);
+        // Загружаем технику вместе с рейтингом
+        var equipment = await _context.Equipment
+            .Include(e => e.Rating)
+            .FirstOrDefaultAsync(e => e.Id == id);
         if (equipment == null)
             return NotFound();
 
@@ -337,6 +345,11 @@ public class EquipmentController : ControllerBase
         if (equipment.OwnerId != currentUserId && currentUser?.Role != "Admin")
             return Forbid("Вы не являетесь владельцем этой техники");
 
+        // Если есть связанный рейтинг – удаляем его вручную
+        if (equipment.Rating != null)
+            _context.EquipmentRatings.Remove(equipment.Rating);
+
+        // Удаляем технику
         _context.Equipment.Remove(equipment);
         await _context.SaveChangesAsync();
         return NoContent();

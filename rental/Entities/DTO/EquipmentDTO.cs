@@ -14,5 +14,6 @@
         public int RentalCount { get; set; }
         public string OwnerName { get; set; } = string.Empty;
         public int? OwnerId { get; set; }
+        public DateTime? LastMaintenanceDate { get; set; }  // новое поле
     }
 }

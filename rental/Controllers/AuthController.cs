@@ -53,7 +53,7 @@ public class AuthController : ControllerBase
             return Unauthorized("Неверное имя или пароль");
 
         var token = GenerateJwtToken(client);
-        return Ok(new { token, clientId = client.Id, role = client.Role });
+        return Ok(new { token, clientId = client.Id, role = client.Role, name = client.Name });
     }
 
     private string GenerateJwtToken(Client client)

@@ -18,10 +18,66 @@ public class RentalsController : ControllerBase
         _context = context;
     }
 
-    // GET: api/rentals (для администратора – список всех бронирований)
+    // =============================================
+    // Вспомогательные методы
+    // =============================================
+
+    /// <summary>
+    /// Обновляет статус техники на основе активных аренд в текущий момент.
+    /// Если есть активная аренда (StartDate <= now < EndDate), статус = "в аренде", иначе "доступен".
+    /// </summary>
+    private async Task UpdateEquipmentStatus(int equipmentId)
+    {
+        var equipment = await _context.Equipment.FindAsync(equipmentId);
+        if (equipment == null) return;
+
+        var now = DateTime.UtcNow;
+        var hasActiveRental = await _context.Rentals
+            .AnyAsync(r => r.EquipmentId == equipmentId
+                           && r.Status == "активно"
+                           && r.StartDate <= now
+                           && r.EndDate > now);
+
+        equipment.Status = hasActiveRental ? "в аренде" : "доступен";
+        await _context.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Завершает все просроченные аренды (EndDate < now) и обновляет статус техники.
+    /// </summary>
+    private async Task CompleteOverdueRentals()
+    {
+        var now = DateTime.UtcNow;
+        var overdueRentals = await _context.Rentals
+            .Include(r => r.Equipment)
+            .Where(r => r.Status == "активно" && r.EndDate < now)
+            .ToListAsync();
+
+        if (!overdueRentals.Any()) return;
+
+        // Завершаем аренды
+        foreach (var rental in overdueRentals)
+        {
+            rental.Status = "завершено";
+        }
+        await _context.SaveChangesAsync();
+
+        // Обновляем статус техники для всех задействованных equipment
+        var equipmentIds = overdueRentals.Select(r => r.EquipmentId).Distinct();
+        foreach (var eqId in equipmentIds)
+        {
+            await UpdateEquipmentStatus(eqId);
+        }
+    }
+
+    // =============================================
+    // GET: api/rentals (администратор – все бронирования)
+    // =============================================
     [HttpGet]
     public async Task<ActionResult<IEnumerable<RentalDto>>> GetRentals()
     {
+        await CompleteOverdueRentals();
+
         var rentals = await _context.Rentals
             .Select(r => new RentalDto
             {
@@ -33,17 +89,22 @@ public class RentalsController : ControllerBase
                 StartDate = r.StartDate,
                 EndDate = r.EndDate,
                 TotalCost = r.TotalCost,
-                Status = r.Status
+                Status = r.Status,
+                PaidAmount = r.Payments.Sum(p => p.Amount)
             })
             .ToListAsync();
 
         return Ok(rentals);
     }
 
+    // =============================================
     // GET: api/rentals/{id} – детали одного бронирования
+    // =============================================
     [HttpGet("{id}")]
     public async Task<ActionResult<RentalDto>> GetRental(int id)
     {
+        await CompleteOverdueRentals();
+
         var rental = await _context.Rentals
             .Where(r => r.Id == id)
             .Select(r => new RentalDto
@@ -56,7 +117,8 @@ public class RentalsController : ControllerBase
                 StartDate = r.StartDate,
                 EndDate = r.EndDate,
                 TotalCost = r.TotalCost,
-                Status = r.Status
+                Status = r.Status,
+                PaidAmount = r.Payments.Sum(p => p.Amount)
             })
             .FirstOrDefaultAsync();
 
@@ -66,11 +128,15 @@ public class RentalsController : ControllerBase
         return Ok(rental);
     }
 
-    // GET: api/rentals/my – бронирования текущего пользователя (личный кабинет)
+    // =============================================
+    // GET: api/rentals/my – бронирования текущего пользователя
+    // =============================================
     [Authorize]
     [HttpGet("my")]
     public async Task<ActionResult<IEnumerable<RentalDto>>> GetMyRentals()
     {
+        await CompleteOverdueRentals();
+
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
@@ -89,36 +155,64 @@ public class RentalsController : ControllerBase
                 StartDate = r.StartDate,
                 EndDate = r.EndDate,
                 TotalCost = r.TotalCost,
-                Status = r.Status
+                Status = r.Status,
+                PaidAmount = r.Payments.Sum(p => p.Amount)
             })
             .ToListAsync();
 
         return Ok(rentals);
     }
 
-    // POST: api/rentals – создание бронирования (только для авторизованных)
+    // =============================================
+    // POST: api/rentals – создание бронирования
+    // =============================================
     [Authorize]
     [HttpPost]
     public async Task<ActionResult<RentalDto>> PostRental(RentalCreateDto dto)
     {
-        // 1. Получаем ID пользователя из токена
+        // 1. Получаем ID пользователя
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId))
             return Unauthorized();
 
         int clientId;
-        // 2. Если пользователь админ и передан ClientId – используем его, иначе берём из токена
         if (User.IsInRole("Admin") && dto.ClientId.HasValue)
             clientId = dto.ClientId.Value;
         else
             clientId = int.Parse(userId);
 
-        // 3. Проверяем существование клиента
+        // 2. Проверяем клиента
         var client = await _context.Clients.FindAsync(clientId);
         if (client == null)
             return BadRequest("Клиент не найден");
 
-        // 4. Создаём объект Rental из DTO
+        // 3. Проверяем технику
+        var equipment = await _context.Equipment.FindAsync(dto.EquipmentId);
+        if (equipment == null)
+            return BadRequest("Техника не найдена");
+
+        // 4. Запрет бронирования своей техники
+        if (equipment.OwnerId == clientId)
+            return BadRequest("Нельзя забронировать собственную технику");
+
+        // 5. Проверка пересечения с обслуживанием
+        var maintenanceConflict = await _context.Maintenances
+            .AnyAsync(m => m.EquipmentId == equipment.Id
+                           && m.StartDate < dto.EndDate
+                           && m.EndDate > dto.StartDate);
+        if (maintenanceConflict)
+            return BadRequest("Техника на обслуживании в выбранный период");
+
+        // 6. Проверка пересечения с другими активными арендами
+        var rentalConflict = await _context.Rentals
+            .AnyAsync(r => r.EquipmentId == equipment.Id
+                           && r.Status == "активно"
+                           && r.StartDate < dto.EndDate
+                           && r.EndDate > dto.StartDate);
+        if (rentalConflict)
+            return BadRequest("Техника уже забронирована в выбранный период");
+
+        // 7. Создаём аренду
         var rental = new Rental
         {
             ClientId = clientId,
@@ -128,43 +222,20 @@ public class RentalsController : ControllerBase
             Status = "активно"
         };
 
-        // 5. Проверяем существование техники
-        var equipment = await _context.Equipment.FindAsync(rental.EquipmentId);
-        if (equipment == null)
-            return BadRequest("Техника не найдена");
-
-        // ----- НОВАЯ ПРОВЕРКА -----
-        if (equipment.OwnerId == clientId)
-            return BadRequest("Нельзя забронировать собственную технику");
-        // --------------------------
-
-        // 6. Проверяем, что техника доступна
-        if (equipment.Status != "доступен")
-            return BadRequest("Техника сейчас недоступна для аренды");
-
-        // 7. Проверяем пересечение с обслуживанием
-        var maintenanceConflict = await _context.Maintenances
-            .AnyAsync(m => m.EquipmentId == rental.EquipmentId
-                           && m.StartDate < rental.EndDate
-                           && m.EndDate > rental.StartDate);
-        if (maintenanceConflict)
-            return BadRequest("Техника на обслуживании в выбранный период");
-
-        // 8. Расчёт стоимости
         var hours = (rental.EndDate - rental.StartDate).TotalHours;
         if (hours <= 0)
             return BadRequest("Дата окончания должна быть позже даты начала");
 
         rental.TotalCost = (decimal)hours * equipment.HourlyRate;
 
-        // 9. Устанавливаем статусы
-        equipment.Status = "в аренде";
-
-        // 10. Сохраняем
+        // 8. Сохраняем
         _context.Rentals.Add(rental);
         await _context.SaveChangesAsync();
 
-        // 11. Формируем DTO для ответа
+        // 9. Обновляем статус техники (может измениться, если аренда началась прямо сейчас)
+        await UpdateEquipmentStatus(equipment.Id);
+
+        // 10. Формируем DTO для ответа
         var savedRental = await _context.Rentals
             .Include(r => r.Client)
             .Include(r => r.Equipment)
@@ -180,18 +251,25 @@ public class RentalsController : ControllerBase
             StartDate = savedRental.StartDate,
             EndDate = savedRental.EndDate,
             TotalCost = savedRental.TotalCost,
-            Status = savedRental.Status
+            Status = savedRental.Status,
+            PaidAmount = savedRental.Payments.Sum(p => p.Amount)
         };
 
         return CreatedAtAction(nameof(GetRental), new { id = rental.Id }, rentalDto);
     }
 
+    // =============================================
     // PUT: api/rentals/{id} – обновление бронирования (администратор)
+    // =============================================
     [HttpPut("{id}")]
     public async Task<IActionResult> PutRental(int id, Rental rental)
     {
         if (id != rental.Id)
             return BadRequest();
+
+        // Приводим даты к UTC
+        rental.StartDate = DateTime.SpecifyKind(rental.StartDate, DateTimeKind.Utc);
+        rental.EndDate = DateTime.SpecifyKind(rental.EndDate, DateTimeKind.Utc);
 
         var existing = await _context.Rentals
             .AsNoTracking()
@@ -236,7 +314,9 @@ public class RentalsController : ControllerBase
         return NoContent();
     }
 
+    // =============================================
     // DELETE: api/rentals/{id} – удаление (администратор)
+    // =============================================
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteRental(int id)
     {
@@ -244,19 +324,18 @@ public class RentalsController : ControllerBase
         if (rental == null)
             return NotFound();
 
-        if (rental.Status == "активно")
-        {
-            var equipment = await _context.Equipment.FindAsync(rental.EquipmentId);
-            if (equipment != null)
-                equipment.Status = "доступен";
-        }
-
         _context.Rentals.Remove(rental);
         await _context.SaveChangesAsync();
+
+        // Обновляем статус техники
+        await UpdateEquipmentStatus(rental.EquipmentId);
+
         return NoContent();
     }
 
+    // =============================================
     // PUT: api/rentals/{id}/cancel – отмена бронирования текущим пользователем
+    // =============================================
     [Authorize]
     [HttpPut("{id}/cancel")]
     public async Task<IActionResult> CancelRental(int id)
@@ -271,7 +350,6 @@ public class RentalsController : ControllerBase
         if (rental == null)
             return NotFound();
 
-        // Проверяем, что бронирование принадлежит текущему пользователю
         if (rental.ClientId != clientId)
             return Forbid();
 
@@ -279,15 +357,17 @@ public class RentalsController : ControllerBase
             return BadRequest("Бронирование уже завершено или отменено");
 
         rental.Status = "отменено";
-        var equipment = await _context.Equipment.FindAsync(rental.EquipmentId);
-        if (equipment != null)
-            equipment.Status = "доступен";
-
         await _context.SaveChangesAsync();
+
+        // Обновляем статус техники
+        await UpdateEquipmentStatus(rental.EquipmentId);
+
         return NoContent();
     }
 
-    // PUT: api/rentals/{id}/extend – продление аренды на 1 час (только для авторизованного владельца)
+    // =============================================
+    // PUT: api/rentals/{id}/extend – продление аренды на 1 час
+    // =============================================
     [Authorize]
     [HttpPut("{id}/extend")]
     public async Task<IActionResult> ExtendRental(int id)
@@ -308,23 +388,28 @@ public class RentalsController : ControllerBase
         if (rental.Status != "активно")
             return BadRequest("Бронирование не активно");
 
-        var newEnd = rental.EndDate.AddHours(1);
+        // Приводим существующие даты к UTC
+        var startUtc = DateTime.SpecifyKind(rental.StartDate, DateTimeKind.Utc);
+        var endUtc = DateTime.SpecifyKind(rental.EndDate, DateTimeKind.Utc);
 
-        // Проверяем, не занята ли техника в этот час другими арендами
+        var newEnd = endUtc.AddHours(1);
+        newEnd = DateTime.SpecifyKind(newEnd, DateTimeKind.Utc);
+
+        // Проверяем конфликт с другими арендами
         var conflict = await _context.Rentals
             .AnyAsync(r => r.EquipmentId == rental.EquipmentId
                            && r.Id != id
                            && r.Status == "активно"
                            && r.StartDate < newEnd
-                           && r.EndDate > rental.EndDate);
+                           && r.EndDate > endUtc);
         if (conflict)
             return BadRequest("Техника уже забронирована на этот час");
 
-        // Проверяем обслуживание
+        // Проверяем конфликт с ТО
         var maintenanceConflict = await _context.Maintenances
             .AnyAsync(m => m.EquipmentId == rental.EquipmentId
                            && m.StartDate < newEnd
-                           && m.EndDate > rental.EndDate);
+                           && m.EndDate > endUtc);
         if (maintenanceConflict)
             return BadRequest("Техника на обслуживании в этот час");
 
@@ -332,7 +417,7 @@ public class RentalsController : ControllerBase
         if (equipment == null)
             return BadRequest("Техника не найдена");
 
-        var hours = (newEnd - rental.StartDate).TotalHours;
+        var hours = (newEnd - startUtc).TotalHours;
         rental.TotalCost = (decimal)hours * equipment.HourlyRate;
         rental.EndDate = newEnd;
 

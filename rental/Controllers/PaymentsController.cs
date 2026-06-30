@@ -1,7 +1,9 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using rental.Entities;
 using rental.Data;
+using rental.Entities;
+using System.Security.Claims;
 
 namespace rental.Controllers;
 
@@ -61,15 +63,78 @@ public class PaymentsController : ControllerBase
     }
 
 
+    // GET: api/payments/revenue/my
+    [HttpGet("revenue/my")]
+    [Authorize]
+    public async Task<ActionResult> GetMyRevenue(
+        [FromQuery] DateTime start,
+        [FromQuery] DateTime end,
+        [FromQuery] string groupBy = "type") // "type" или "equipment"
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId))
+            return Unauthorized();
+
+        int clientId = int.Parse(userId);
+
+        DateTime startUtc = DateTime.SpecifyKind(start, DateTimeKind.Utc);
+        DateTime endUtc = DateTime.SpecifyKind(end, DateTimeKind.Utc);
+
+        // Платежи за период, привязанные к арендам, где владелец техники = текущий пользователь
+        var query = _context.Payments
+            .Where(p => p.PaymentDate >= startUtc && p.PaymentDate <= endUtc)
+            .Join(_context.Rentals, p => p.RentalId, r => r.Id, (p, r) => new { p, r })
+            .Where(pr => pr.r.Equipment.OwnerId == clientId);
+
+        if (groupBy == "equipment")
+        {
+            // Группировка по каждой единице техники
+            var result = await query
+                .GroupBy(pr => new { pr.r.Equipment.Id, pr.r.Equipment.Name })
+                .Select(g => new
+                {
+                    EquipmentId = g.Key.Id,
+                    EquipmentName = g.Key.Name,
+                    Total = g.Sum(x => x.p.Amount)
+                })
+                .OrderByDescending(x => x.Total)
+                .ToListAsync();
+            return Ok(result);
+        }
+        else
+        {
+            // Группировка по типам техники (по умолчанию)
+            var result = await query
+                .Join(_context.EquipmentTypes, pr => pr.r.Equipment.TypeId, t => t.Id, (pr, t) => new { pr, t })
+                .GroupBy(x => x.t.Name)
+                .Select(g => new
+                {
+                    Type = g.Key,
+                    Total = g.Sum(x => x.pr.p.Amount)
+                })
+                .ToListAsync();
+            return Ok(result);
+        }
+    }
+
     [HttpPost]
     public async Task<ActionResult<Payment>> PostPayment(Payment payment)
     {
-        var rentalExists = await _context.Rentals.AnyAsync(r => r.Id == payment.RentalId);
-        if (!rentalExists)
+        var rental = await _context.Rentals
+            .Include(r => r.Equipment)
+            .FirstOrDefaultAsync(r => r.Id == payment.RentalId);
+        if (rental == null)
             return BadRequest("Бронирование не найдено");
+
+        if (rental.Status == "отменено")
+            return BadRequest("Нельзя оплатить отменённое бронирование");
+
+        if (rental.Status != "активно")
+            return BadRequest("Можно оплачивать только активные бронирования");
 
         _context.Payments.Add(payment);
         await _context.SaveChangesAsync();
+
         return CreatedAtAction(nameof(GetPayment), new { id = payment.Id }, payment);
     }
 

@@ -2,6 +2,7 @@
 using Microsoft.EntityFrameworkCore;
 using rental.Entities;
 using rental.Data;
+using System.Security.Claims;
 
 namespace rental.Controllers;
 
@@ -16,67 +17,178 @@ public class MaintenancesController : ControllerBase
         _context = context;
     }
 
+    // GET: api/maintenances
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<Maintenance>>> GetMaintenances()
+    public async Task<ActionResult<IEnumerable<MaintenanceDto>>> GetMaintenances()
     {
-        return await _context.Maintenances
+        var maintenances = await _context.Maintenances
             .Include(m => m.Equipment)
+            .Select(m => new MaintenanceDto
+            {
+                Id = m.Id,
+                EquipmentId = m.EquipmentId,
+                EquipmentName = m.Equipment != null ? m.Equipment.Name : null,
+                StartDate = m.StartDate,
+                EndDate = m.EndDate,
+                Type = m.Type,
+                Cost = m.Cost
+            })
             .ToListAsync();
+
+        return Ok(maintenances);
     }
 
+    // GET: api/maintenances/{id}
     [HttpGet("{id}")]
-    public async Task<ActionResult<Maintenance>> GetMaintenance(int id)
+    public async Task<ActionResult<MaintenanceDto>> GetMaintenance(int id)
     {
         var maintenance = await _context.Maintenances
             .Include(m => m.Equipment)
-            .FirstOrDefaultAsync(m => m.Id == id);
+            .Where(m => m.Id == id)
+            .Select(m => new MaintenanceDto
+            {
+                Id = m.Id,
+                EquipmentId = m.EquipmentId,
+                EquipmentName = m.Equipment != null ? m.Equipment.Name : null,
+                StartDate = m.StartDate,
+                EndDate = m.EndDate,
+                Type = m.Type,
+                Cost = m.Cost
+            })
+            .FirstOrDefaultAsync();
 
         if (maintenance == null)
             return NotFound();
 
-        return maintenance;
+        return Ok(maintenance);
     }
 
+    // GET: api/maintenances/overdue
     [HttpGet("overdue")]
-    public async Task<ActionResult<IEnumerable<Maintenance>>> GetOverdue()
+    public async Task<ActionResult<IEnumerable<MaintenanceDto>>> GetOverdue()
     {
-        var now = DateTime.UtcNow;  // заменяем DateTime.Now на UtcNow
-        var overdue = await _context.Maintenances
-            .Where(m => m.EndDate < now)
+        var now = DateTime.UtcNow;
+
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        int? currentUserId = null;
+        if (!string.IsNullOrEmpty(userId))
+            currentUserId = int.Parse(userId);
+
+        var query = _context.Maintenances
             .Include(m => m.Equipment)
-            .Where(m => m.Equipment.Status == "на обслуживании")
+            .Where(m => m.EndDate < now && m.Equipment != null && m.Equipment.Status == "на обслуживании");
+
+        if (currentUserId.HasValue && !User.IsInRole("Admin"))
+        {
+            query = query.Where(m => m.Equipment != null && m.Equipment.OwnerId == currentUserId.Value);
+        }
+        else if (!currentUserId.HasValue)
+        {
+            return Ok(Enumerable.Empty<MaintenanceDto>());
+        }
+
+        var overdue = await query
+            .Select(m => new MaintenanceDto
+            {
+                Id = m.Id,
+                EquipmentId = m.EquipmentId,
+                EquipmentName = m.Equipment != null ? m.Equipment.Name : null,
+                StartDate = m.StartDate,
+                EndDate = m.EndDate,
+                Type = m.Type,
+                Cost = m.Cost
+            })
             .ToListAsync();
+
         return Ok(overdue);
     }
 
-
+    // POST: api/maintenances
     [HttpPost]
-    public async Task<ActionResult<Maintenance>> PostMaintenance(Maintenance maintenance)
+    public async Task<ActionResult<MaintenanceDto>> PostMaintenance(MaintenanceCreateDto dto)
     {
-        var equipmentExists = await _context.Equipment.AnyAsync(e => e.Id == maintenance.EquipmentId);
-        if (!equipmentExists)
+        // Проверяем существование техники
+        var equipment = await _context.Equipment.FindAsync(dto.EquipmentId);
+        if (equipment == null)
             return BadRequest("Техника не найдена");
 
-        if (maintenance.StartDate <= DateTime.Now && maintenance.EndDate >= DateTime.Now)
+        // Приводим даты к UTC
+        var startUtc = DateTime.SpecifyKind(dto.StartDate, DateTimeKind.Utc);
+        var endUtc = DateTime.SpecifyKind(dto.EndDate, DateTimeKind.Utc);
+
+        var maintenance = new Maintenance
         {
-            var equipment = await _context.Equipment.FindAsync(maintenance.EquipmentId);
-            if (equipment != null)
-                equipment.Status = "на обслуживании";
+            EquipmentId = dto.EquipmentId,
+            StartDate = startUtc,
+            EndDate = endUtc,
+            Type = dto.Type,
+            Cost = dto.Cost
+        };
+
+        // Если ТО активно сейчас – обновляем статус техники
+        if (startUtc <= DateTime.UtcNow && endUtc >= DateTime.UtcNow)
+        {
+            equipment.Status = "на обслуживании";
         }
 
         _context.Maintenances.Add(maintenance);
         await _context.SaveChangesAsync();
-        return CreatedAtAction(nameof(GetMaintenance), new { id = maintenance.Id }, maintenance);
+
+        var result = new MaintenanceDto
+        {
+            Id = maintenance.Id,
+            EquipmentId = maintenance.EquipmentId,
+            EquipmentName = equipment.Name,
+            StartDate = maintenance.StartDate,
+            EndDate = maintenance.EndDate,
+            Type = maintenance.Type,
+            Cost = maintenance.Cost
+        };
+
+        return CreatedAtAction(nameof(GetMaintenance), new { id = maintenance.Id }, result);
     }
 
+    // PUT: api/maintenances/{id}
     [HttpPut("{id}")]
-    public async Task<IActionResult> PutMaintenance(int id, Maintenance maintenance)
+    public async Task<IActionResult> PutMaintenance(int id, MaintenanceUpdateDto dto)
     {
-        if (id != maintenance.Id)
+        if (id != dto.Id)
             return BadRequest();
 
-        _context.Entry(maintenance).State = EntityState.Modified;
+        var maintenance = await _context.Maintenances.FindAsync(id);
+        if (maintenance == null)
+            return NotFound();
 
+        // Проверяем существование техники
+        var equipment = await _context.Equipment.FindAsync(dto.EquipmentId);
+        if (equipment == null)
+            return BadRequest("Техника не найдена");
+
+        // Приводим даты к UTC
+        var startUtc = DateTime.SpecifyKind(dto.StartDate, DateTimeKind.Utc);
+        var endUtc = DateTime.SpecifyKind(dto.EndDate, DateTimeKind.Utc);
+
+        maintenance.EquipmentId = dto.EquipmentId;
+        maintenance.StartDate = startUtc;
+        maintenance.EndDate = endUtc;
+        maintenance.Type = dto.Type;
+        maintenance.Cost = dto.Cost;
+
+        // Обновляем статус техники (если ТО активно)
+        if (startUtc <= DateTime.UtcNow && endUtc >= DateTime.UtcNow)
+        {
+            equipment.Status = "на обслуживании";
+        }
+        else
+        {
+            // Если ТО закончилось, но статус всё ещё "на обслуживании" – сбрасываем
+            if (equipment.Status == "на обслуживании" && endUtc < DateTime.UtcNow)
+            {
+                equipment.Status = "доступен";
+            }
+        }
+
+        _context.Entry(maintenance).State = EntityState.Modified;
         try
         {
             await _context.SaveChangesAsync();
@@ -91,10 +203,13 @@ public class MaintenancesController : ControllerBase
         return NoContent();
     }
 
+    // DELETE: api/maintenances/{id}
     [HttpDelete("{id}")]
     public async Task<IActionResult> DeleteMaintenance(int id)
     {
-        var maintenance = await _context.Maintenances.FindAsync(id);
+        var maintenance = await _context.Maintenances
+            .Include(m => m.Equipment)
+            .FirstOrDefaultAsync(m => m.Id == id);
         if (maintenance == null)
             return NotFound();
 

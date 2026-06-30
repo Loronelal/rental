@@ -204,8 +204,57 @@ public class ForecastController : ControllerBase
             sum += array[i];
         return sum / count;
     }
-}
 
+
+
+// GET: api/forecast/monthly
+[HttpGet("monthly")]
+    public async Task<ActionResult<IEnumerable<DailyForecast>>> GetMonthlyAverageForecast(
+    [FromQuery] DateTime startDate,
+    [FromQuery] DateTime endDate,
+    [FromQuery] int? equipmentTypeId = null)
+    {
+        startDate = DateTime.SpecifyKind(startDate, DateTimeKind.Utc);
+        endDate = DateTime.SpecifyKind(endDate, DateTimeKind.Utc);
+
+        // Берём историю за последние 2 года (чтобы сгладить случайности)
+        var historyStart = startDate.AddYears(-2);
+        var historyEnd = startDate;
+
+        var query = _context.Rentals
+            .Where(r => r.StartDate >= historyStart && r.StartDate < historyEnd && r.Status == "завершено");
+
+        if (equipmentTypeId.HasValue)
+            query = query.Where(r => r.Equipment.TypeId == equipmentTypeId.Value);
+
+        var rentals = await query
+            .Select(r => r.StartDate)
+            .ToListAsync();
+
+        // Группируем по месяцу (1-12) и считаем среднее количество аренд в день
+        var monthlyAvg = rentals
+            .GroupBy(d => d.Month)
+            .Select(g => new { Month = g.Key, CountPerDay = (double)g.Count() / 30.0 }) // примерное среднее в день
+            .ToDictionary(x => x.Month, x => x.CountPerDay);
+
+        // Заполняем пропущенные месяцы нулями
+        for (int m = 1; m <= 12; m++)
+            if (!monthlyAvg.ContainsKey(m)) monthlyAvg[m] = 0;
+
+        var result = new List<DailyForecast>();
+        for (var date = startDate; date <= endDate; date = date.AddDays(1))
+        {
+            var predicted = monthlyAvg.ContainsKey(date.Month) ? monthlyAvg[date.Month] : 0;
+            result.Add(new DailyForecast
+            {
+                Date = date,
+                PredictedRentals = Math.Round(predicted, 2)
+            });
+        }
+
+        return Ok(result);
+    }
+}
 // DTO
 public class DailyForecast
 {

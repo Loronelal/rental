@@ -69,8 +69,9 @@ function updateAuthUI() {
     const logoutBtn = document.getElementById('logoutBtn');
 
     const token = getToken();
+    const userName = localStorage.getItem('userName') || 'Гость';
     if (userStatus) {
-        userStatus.innerText = token ? 'Пользователь' : 'Гость';
+        userStatus.innerText = token ? userName : 'Гость';
     }
     if (loginBtn) loginBtn.classList.toggle('d-none', !!token);
     if (registerBtn) registerBtn.classList.toggle('d-none', !!token);
@@ -152,6 +153,7 @@ if (authForm) {
                 setToken(data.token);
                 localStorage.setItem('role', data.role);
                 localStorage.setItem('clientId', data.clientId);
+                localStorage.setItem('userName', data.name);
                 bootstrap.Modal.getInstance(document.getElementById('authModal')).hide();
                 updateAuthUI();
                 loadPageData();
@@ -167,6 +169,7 @@ if (authForm) {
 
 function logout() {
     removeToken();
+    localStorage.removeItem('userName');
     updateAuthUI();
     loadPageData();
 }
@@ -183,6 +186,7 @@ function getCurrentPage() {
     if (path.includes('clients')) return 'clients';
     if (path.includes('equipment')) return 'equipment';
     if (path.includes('rentals')) return 'rentals';
+    if (path.includes('maintenances')) return 'maintenances';
     return 'catalog';
 }
 
@@ -213,6 +217,9 @@ function loadPageData() {
             break;
         case 'rentals':
             loadRentals();
+            break;
+        case 'maintenances':
+            loadMaintenances();
             break;
         default:
             break;
@@ -344,6 +351,8 @@ function renderCatalog() {
 
             const imgSrc = e.typeImageUrl || `https://via.placeholder.com/400x200/0d6efd/ffffff?text=${encodeURIComponent(e.typeName)}`;
 
+            const lastMaint = e.lastMaintenanceDate ? new Date(e.lastMaintenanceDate).toLocaleDateString() : 'не указано';
+
             return `
                 <div class="col-xl-4 col-lg-6 col-md-6 mb-4">
                     <div class="equipment-card">
@@ -354,6 +363,7 @@ function renderCatalog() {
                                 <p><i class="fas fa-calendar-alt"></i> Год: ${e.year}</p>
                                 <p><i class="fas fa-tachometer-alt"></i> Статус: <span class="badge ${statusBadge}">${statusText}</span></p>
                                 <p><i class="fas fa-star"></i> Рейтинг: ${rating} (${rentalCount} аренд)</p>
+                                <p><i class="fas fa-wrench"></i> Последнее ТО: ${lastMaint}</p>
                             </div>
                             <div class="price-block">
                                 <span class="price">${e.hourlyRate || 0} ₽ <small>/ час</small></span>
@@ -447,6 +457,7 @@ async function showDetails(id) {
                     <p><strong>Тип:</strong> ${item.typeName || '—'}</p>
                     <p><strong>Рейтинг:</strong> ${item.avgRating?.toFixed(1) || '0'} (${item.rentalCount || 0} аренд)</p>
                     <p><strong>Владелец:</strong> ${item.ownerName || '—'}</p>
+                    <p><strong>Последнее ТО:</strong> ${item.lastMaintenanceDate ? new Date(item.lastMaintenanceDate).toLocaleDateString() : 'не указано'}</p>
                     ${rentalFormHtml}
                 </div>
             </div>
@@ -525,7 +536,7 @@ async function loadMyRentals() {
                     ${r.status === 'активно' ? `<button class="btn btn-sm btn-danger ms-2" onclick="cancelMyRental(${r.id})">Отменить</button>` : ''}
                     ${r.status === 'активно' ? `<button class="btn btn-sm btn-primary ms-2" onclick="extendRental(${r.id})">+1 час</button>` : ''}
                 </div>
-                <div><span class="badge bg-secondary">Оплачено: 0 руб</span></div>
+                <div><span class="badge bg-secondary">Оплачено: ${r.paidAmount ? r.paidAmount.toFixed(2) : '0'} руб</span></div>
             </li>
         `).join('')}</ul>`;
     } catch (err) {
@@ -568,11 +579,13 @@ async function loadPaymentOptions() {
     }
     try {
         const rentals = await fetchAPI('rentals/my');
-        if (!rentals.length) {
-            select.innerHTML = '<option value="">Нет бронирований</option>';
+        // Показываем только активные бронирования
+        const activeRentals = rentals.filter(r => r.status === 'активно');
+        if (!activeRentals.length) {
+            select.innerHTML = '<option value="">Нет активных бронирований</option>';
             return;
         }
-        select.innerHTML = rentals.map(r => `
+        select.innerHTML = activeRentals.map(r => `
             <option value="${r.id}">Бронь #${r.id} — ${r.equipmentName} (${new Date(r.startDate).toLocaleDateString()} – ${new Date(r.endDate).toLocaleDateString()})</option>
         `).join('');
     } catch (err) {
@@ -676,7 +689,7 @@ async function loadAnalytics() {
             overdueContainer.innerHTML = '<p class="text-muted">Нет просроченного ТО</p>';
         } else {
             overdueContainer.innerHTML = `<ul class="list-group">${overdue.map(m => `
-                <li class="list-group-item">Техника #${m.equipmentId} (ТО закончилось: ${new Date(m.endDate).toLocaleDateString()})</li>
+                <li class="list-group-item">${m.equipment.name} — ТО закончилось ${new Date(m.endDate).toLocaleDateString()}</li>
             `).join('')}</ul>`;
         }
     } catch (err) {
@@ -685,6 +698,7 @@ async function loadAnalytics() {
 
     loadForecastTypes();
     setDefaultForecastDates();
+    setDefaultMyRevenueDates();
 }
 
 const revenueForm = document.getElementById('revenueForm');
@@ -715,8 +729,10 @@ if (revenueForm) {
 }
 
 // ============================================================
-// 9. Моя техника (с модалкой)
+// Моя техника
 // ============================================================
+let allMyEquipment = [];
+
 async function loadMyEquipment() {
     const container = document.getElementById('myEquipmentList');
     if (!container) return;
@@ -726,28 +742,52 @@ async function loadMyEquipment() {
     }
     try {
         const items = await fetchAPI('equipment/my');
-        if (!items.length) {
-            container.innerHTML = '<p class="text-muted">Вы ещё не добавили ни одной единицы техники</p>';
-            return;
-        }
-        container.innerHTML = `<ul class="list-group">${items.map(e => `
-            <li class="list-group-item d-flex justify-content-between align-items-center">
-                <div>
-                    <strong>${e.name}</strong> (${e.year})<br>
-                    <small>Ставка: ${e.hourlyRate} руб/час, Статус: ${e.status}</small>
-                </div>
-                <div>
-                    <button class="btn btn-sm btn-warning me-1" onclick="editMyEquipment(${e.id})"><i class="fas fa-edit"></i></button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteMyEquipment(${e.id})"><i class="fas fa-trash"></i></button>
-                </div>
-            </li>
-        `).join('')}</ul>`;
+        allMyEquipment = items; // сохраняем все для фильтрации
+        renderMyEquipment(allMyEquipment);
     } catch (err) {
         alert('Ошибка загрузки моей техники: ' + err.message);
     }
 }
 
-// Открыть модалку для моей техники (создание или редактирование)
+function renderMyEquipment(items) {
+    const container = document.getElementById('myEquipmentList');
+    if (!container) return;
+    if (!items.length) {
+        container.innerHTML = '<p class="text-muted">Техника не найдена</p>';
+        return;
+    }
+    container.innerHTML = `<ul class="list-group">${items.map(e => `
+        <li class="list-group-item d-flex justify-content-between align-items-center">
+            <div>
+                <strong>${e.name}</strong> (${e.year})<br>
+                <small>Тип: ${e.type?.name || 'не указан'}</small><br>
+                <small>Ставка: ${e.hourlyRate} руб/час, Статус: ${e.status}</small><br>
+                <small>Последнее ТО: ${e.lastMaintenanceDate ? new Date(e.lastMaintenanceDate).toLocaleDateString() : 'не указано'}</small>
+            </div>
+            <div>
+                <button class="btn btn-sm btn-warning me-1" onclick="editMyEquipment(${e.id})"><i class="fas fa-edit"></i></button>
+                <button class="btn btn-sm btn-danger" onclick="deleteMyEquipment(${e.id})"><i class="fas fa-trash"></i></button>
+            </div>
+        </li>
+    `).join('')}</ul>`;
+}
+
+function applyMyEquipmentFilter() {
+    const search = document.getElementById('myEquipmentSearch')?.value.toLowerCase().trim() || '';
+    const filtered = allMyEquipment.filter(e => {
+        const nameMatch = e.name.toLowerCase().includes(search);
+        const typeMatch = (e.type?.name || '').toLowerCase().includes(search);
+        return nameMatch || typeMatch;
+    });
+    renderMyEquipment(filtered);
+}
+
+function resetMyEquipmentFilter() {
+    const input = document.getElementById('myEquipmentSearch');
+    if (input) input.value = '';
+    renderMyEquipment(allMyEquipment);
+}
+
 function showMyEquipmentForm(equip = null) {
     const modal = new bootstrap.Modal(document.getElementById('myEquipmentModal'));
     const title = document.getElementById('myEquipmentModalLabel');
@@ -757,8 +797,8 @@ function showMyEquipmentForm(equip = null) {
     const yearField = document.getElementById('myEquipmentYear');
     const rateField = document.getElementById('myEquipmentRate');
     const statusField = document.getElementById('myEquipmentStatus');
+    const lastMaintField = document.getElementById('myEquipmentLastMaintenanceDate');
 
-    // Загружаем типы для выпадающего списка
     loadMyEquipmentTypes();
 
     if (equip) {
@@ -769,20 +809,25 @@ function showMyEquipmentForm(equip = null) {
         yearField.value = equip.year;
         rateField.value = equip.hourlyRate;
         statusField.value = equip.status;
+        if (equip.lastMaintenanceDate) {
+            const date = new Date(equip.lastMaintenanceDate);
+            lastMaintField.value = date.toISOString().split('T')[0];
+        } else {
+            lastMaintField.value = '';
+        }
     } else {
         title.textContent = 'Добавление техники';
         idField.value = 0;
         document.getElementById('myEquipmentForm').reset();
+        lastMaintField.value = '';
     }
     modal.show();
 }
 
-// Закрыть модалку
 function hideMyEquipmentForm() {
     bootstrap.Modal.getInstance(document.getElementById('myEquipmentModal')).hide();
 }
 
-// Загрузка типов для выпадающего списка
 async function loadMyEquipmentTypes() {
     const select = document.getElementById('myEquipmentTypeId');
     if (!select) return;
@@ -800,20 +845,20 @@ async function loadMyEquipmentTypes() {
     }
 }
 
-// Обработчик формы моей техники
 const myEquipmentForm = document.getElementById('myEquipmentForm');
 if (myEquipmentForm) {
-    // Убираем старый обработчик, чтобы избежать дублирования
     myEquipmentForm.removeEventListener('submit', myEquipmentForm._listener);
     myEquipmentForm._listener = async function (e) {
         e.preventDefault();
         const id = parseInt(document.getElementById('myEquipmentId').value);
+        const lastMaint = document.getElementById('myEquipmentLastMaintenanceDate').value;
         const data = {
             name: document.getElementById('myEquipmentName').value.trim(),
             typeId: parseInt(document.getElementById('myEquipmentTypeId').value),
             year: parseInt(document.getElementById('myEquipmentYear').value),
             hourlyRate: parseFloat(document.getElementById('myEquipmentRate').value),
-            status: document.getElementById('myEquipmentStatus').value
+            status: document.getElementById('myEquipmentStatus').value,
+            lastMaintenanceDate: lastMaint ? new Date(lastMaint).toISOString() : null
         };
         if (!data.name || isNaN(data.typeId) || isNaN(data.year) || isNaN(data.hourlyRate)) {
             alert('Заполните все обязательные поля');
@@ -856,7 +901,7 @@ async function deleteMyEquipment(id) {
 }
 
 // ============================================================
-// 10. Админские CRUD (Клиенты, Техника, Бронирования) с модалками
+// 10. Админские CRUD (Клиенты, Техника, Бронирования)
 // ============================================================
 
 // ---------- КЛИЕНТЫ ----------
@@ -947,7 +992,6 @@ function hideClientForm() {
 
 const clientForm = document.getElementById('clientForm');
 if (clientForm) {
-    // Убираем старые обработчики, чтобы избежать дублирования
     clientForm.removeEventListener('submit', clientForm._listener);
     clientForm._listener = async function (e) {
         e.preventDefault();
@@ -1012,7 +1056,6 @@ async function loadEquipment() {
         allEquipmentAdmin = items;
         filteredEquipmentAdmin = [...items];
         renderEquipmentAdmin();
-        // Заполняем выпадающий список типов для фильтра
         const types = await fetchAPI('equipmenttypes');
         const typeSelect = document.getElementById('eqTypeFilter');
         if (typeSelect) {
@@ -1040,7 +1083,8 @@ function renderEquipmentAdmin() {
         <li class="list-group-item d-flex justify-content-between align-items-center">
             <div>
                 <strong>${e.name}</strong> (${e.year})<br>
-                <small>Ставка: ${e.hourlyRate} руб/час, Статус: ${e.status}</small>
+                <small>Ставка: ${e.hourlyRate} руб/час, Статус: ${e.status}</small><br>
+                <small>Последнее ТО: ${e.lastMaintenanceDate ? new Date(e.lastMaintenanceDate).toLocaleDateString() : 'не указано'}</small>
             </div>
             <div>
                 <button class="btn btn-sm btn-warning me-1" onclick="editEquipment(${e.id})"><i class="fas fa-edit"></i></button>
@@ -1084,6 +1128,10 @@ function showEquipmentForm(equip = null) {
     const yearField = document.getElementById('equipmentYear');
     const rateField = document.getElementById('equipmentRate');
     const statusField = document.getElementById('equipmentStatus');
+    const lastMaintField = document.getElementById('equipmentLastMaintenanceDate');
+
+    // Загружаем типы в выпадающий список
+    loadEquipmentTypesForAdmin();
 
     if (equip) {
         title.textContent = 'Редактирование техники';
@@ -1093,10 +1141,17 @@ function showEquipmentForm(equip = null) {
         yearField.value = equip.year;
         rateField.value = equip.hourlyRate;
         statusField.value = equip.status;
+        if (equip.lastMaintenanceDate) {
+            const date = new Date(equip.lastMaintenanceDate);
+            lastMaintField.value = date.toISOString().split('T')[0];
+        } else {
+            lastMaintField.value = '';
+        }
     } else {
         title.textContent = 'Добавление техники';
         idField.value = 0;
         document.getElementById('equipmentForm').reset();
+        lastMaintField.value = '';
     }
     modal.show();
 }
@@ -1111,12 +1166,14 @@ if (equipmentForm) {
     equipmentForm._listener = async function (e) {
         e.preventDefault();
         const id = parseInt(document.getElementById('equipmentId').value);
+        const lastMaint = document.getElementById('equipmentLastMaintenanceDate').value;
         const data = {
             name: document.getElementById('equipmentName').value.trim(),
             typeId: parseInt(document.getElementById('equipmentTypeId').value),
             year: parseInt(document.getElementById('equipmentYear').value),
             hourlyRate: parseFloat(document.getElementById('equipmentRate').value),
-            status: document.getElementById('equipmentStatus').value
+            status: document.getElementById('equipmentStatus').value,
+            lastMaintenanceDate: lastMaint ? new Date(lastMaint).toISOString() : null
         };
         if (!data.name || isNaN(data.typeId) || isNaN(data.year) || isNaN(data.hourlyRate)) {
             alert('Заполните все обязательные поля');
@@ -1334,10 +1391,8 @@ async function deleteRental(id) {
 }
 
 // ============================================================
-// 12. Прогнозирование спроса (модель Хольта-Уинтерса)
+// 11. Прогнозирование спроса (Хольта-Уинтерса)
 // ============================================================
-
-// Загрузка типов для фильтра прогноза
 async function loadForecastTypes() {
     const select = document.getElementById('forecastType');
     if (!select) return;
@@ -1355,7 +1410,6 @@ async function loadForecastTypes() {
     }
 }
 
-// Установка дат по умолчанию (завтра + 30 дней)
 function setDefaultForecastDates() {
     const start = document.getElementById('forecastStart');
     const end = document.getElementById('forecastEnd');
@@ -1370,7 +1424,6 @@ function setDefaultForecastDates() {
     }
 }
 
-// Обработчик формы прогноза
 const forecastForm = document.getElementById('forecastForm');
 if (forecastForm) {
     forecastForm.addEventListener('submit', async function (e) {
@@ -1400,7 +1453,6 @@ if (forecastForm) {
                 return;
             }
 
-            // Таблица
             let tableHtml = `<table class="table table-sm table-striped"><thead><tr><th>Дата</th><th>Прогноз аренд</th></tr></thead><tbody>`;
             data.forEach(item => {
                 const date = new Date(item.date).toLocaleDateString();
@@ -1409,7 +1461,6 @@ if (forecastForm) {
             tableHtml += '</tbody></table>';
             tableContainer.innerHTML = tableHtml;
 
-            // График
             const ctx = document.getElementById('forecastChart').getContext('2d');
             if (window.forecastChartInstance) {
                 window.forecastChartInstance.destroy();
@@ -1447,9 +1498,284 @@ if (forecastForm) {
 }
 
 
+// ============================================================
+// Моя выручка (для владельца техники)
+// ============================================================
+const myRevenueForm = document.getElementById('myRevenueForm');
+if (myRevenueForm) {
+    // Удалим возможные старые обработчики, чтобы избежать дублирования
+    myRevenueForm.removeEventListener('submit', myRevenueForm._listener);
+    myRevenueForm._listener = async function (e) {
+        e.preventDefault(); // гарантированно отключаем стандартную отправку
+        console.log('📊 Запрос моей выручки'); // для отладки
+
+        const start = document.getElementById('myRevenueStart').value;
+        const end = document.getElementById('myRevenueEnd').value;
+        const groupBy = document.getElementById('myRevenueGroup').value;
+
+        if (!start || !end) {
+            alert('Укажите даты');
+            return;
+        }
+
+        try {
+            const data = await fetchAPI(`payments/revenue/my?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&groupBy=${groupBy}`);
+            const container = document.getElementById('myRevenueResults');
+            if (!container) return;
+            if (!data.length) {
+                container.innerHTML = '<p class="text-muted">Нет данных</p>';
+                return;
+            }
+            let tableHtml = `<table class="table table-sm"><thead><tr><th>${groupBy === 'equipment' ? 'Название техники' : 'Тип'}</th><th>Выручка</th></tr></thead><tbody>`;
+            data.forEach(item => {
+                const name = groupBy === 'equipment' ? item.equipmentName : item.type;
+                tableHtml += `<tr><td>${name}</td><td>${item.total.toFixed(2)}</td></tr>`;
+            });
+            tableHtml += '</tbody></table>';
+            container.innerHTML = tableHtml;
+        } catch (err) {
+            alert('Ошибка: ' + err.message);
+        }
+    };
+    myRevenueForm.addEventListener('submit', myRevenueForm._listener);
+}
+
+// Установка дат по умолчанию для моей выручки
+function setDefaultMyRevenueDates() {
+    const start = document.getElementById('myRevenueStart');
+    const end = document.getElementById('myRevenueEnd');
+    if (start && end) {
+        const now = new Date();
+        const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        start.value = firstDayOfMonth.toISOString().split('T')[0];
+        end.value = today.toISOString().split('T')[0];
+    }
+}
 
 // ============================================================
-// 11. Инициализация при загрузке страницы
+// Загрузка типов для админской формы техники
+// ============================================================
+async function loadEquipmentTypesForAdmin() {
+    const select = document.getElementById('equipmentTypeId');
+    if (!select) return;
+    try {
+        const types = await fetchAPI('equipmenttypes');
+        select.innerHTML = '<option value="">Выберите тип</option>';
+        types.forEach(t => {
+            const opt = document.createElement('option');
+            opt.value = t.id;
+            opt.text = t.name;
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        console.error('Ошибка загрузки типов для админки:', e);
+    }
+}
+
+// ============================================================
+// Управление ТО (админ)
+// ============================================================
+let allMaintenances = [];
+let allEquipmentForMaintenance = [];
+
+async function loadMaintenances() {
+    const container = document.getElementById('maintenancesList');
+    if (!container) return;
+    if (!isAdmin()) {
+        container.innerHTML = '<p class="text-muted">Доступно только администратору</p>';
+        return;
+    }
+    try {
+        const [maintenances, equipment] = await Promise.all([
+            fetchAPI('maintenances'),
+            fetchAPI('equipment')
+        ]);
+        allMaintenances = maintenances;
+        allEquipmentForMaintenance = equipment;
+        renderMaintenances(allMaintenances);
+        // Заполняем выпадающие списки с техникой
+        const select = document.getElementById('maintenanceEquipmentId');
+        if (select) {
+            select.innerHTML = '<option value="">Выберите технику</option>';
+            equipment.forEach(e => {
+                const opt = document.createElement('option');
+                opt.value = e.id;
+                opt.text = `${e.name} (ID: ${e.id})`;
+                select.appendChild(opt);
+            });
+        }
+        // Заполняем фильтр по технике
+        const filterSelect = document.getElementById('maintenanceEquipmentFilter');
+        if (filterSelect) {
+            filterSelect.innerHTML = '<option value="">Все техника</option>';
+            equipment.forEach(e => {
+                const opt = document.createElement('option');
+                opt.value = e.id;
+                opt.text = `${e.name} (ID: ${e.id})`;
+                filterSelect.appendChild(opt);
+            });
+        }
+    } catch (err) {
+        alert('Ошибка загрузки ТО: ' + err.message);
+    }
+}
+
+function renderMaintenances(items) {
+    const container = document.getElementById('maintenancesList');
+    if (!container) return;
+    if (!items.length) {
+        container.innerHTML = '<p class="text-muted">Записей ТО не найдено</p>';
+        return;
+    }
+    container.innerHTML = `<ul class="list-group">${items.map(m => {
+        const equipmentName = allEquipmentForMaintenance.find(e => e.id === m.equipmentId)?.name || 'Техника #' + m.equipmentId;
+        return `
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                <div>
+                    <strong>${equipmentName}</strong><br>
+                    <small>С ${new Date(m.startDate).toLocaleString()} по ${new Date(m.endDate).toLocaleString()}</small><br>
+                    <span class="badge bg-secondary">${m.type}</span>
+                    <span class="badge bg-success">${m.cost} руб</span>
+                </div>
+                <div>
+                    <button class="btn btn-sm btn-warning me-1" onclick="editMaintenance(${m.id})"><i class="fas fa-edit"></i></button>
+                    <button class="btn btn-sm btn-danger" onclick="deleteMaintenance(${m.id})"><i class="fas fa-trash"></i></button>
+                </div>
+            </li>
+        `;
+    }).join('')}</ul>`;
+}
+
+function applyMaintenanceFilters() {
+    const equipFilter = document.getElementById('maintenanceEquipmentFilter').value;
+    const typeFilter = document.getElementById('maintenanceTypeFilter').value;
+    const dateFrom = document.getElementById('maintenanceDateFrom').value;
+    const dateTo = document.getElementById('maintenanceDateTo').value;
+    let filtered = allMaintenances;
+    if (equipFilter) filtered = filtered.filter(m => m.equipmentId == equipFilter);
+    if (typeFilter) filtered = filtered.filter(m => m.type === typeFilter);
+    if (dateFrom) {
+        const from = new Date(dateFrom);
+        filtered = filtered.filter(m => new Date(m.startDate) >= from);
+    }
+    if (dateTo) {
+        const to = new Date(dateTo);
+        filtered = filtered.filter(m => new Date(m.endDate) <= to);
+    }
+    renderMaintenances(filtered);
+}
+
+function resetMaintenanceFilters() {
+    document.getElementById('maintenanceEquipmentFilter').value = '';
+    document.getElementById('maintenanceTypeFilter').value = '';
+    document.getElementById('maintenanceDateFrom').value = '';
+    document.getElementById('maintenanceDateTo').value = '';
+    renderMaintenances(allMaintenances);
+}
+
+function showMaintenanceForm(maintenance = null) {
+    const modal = new bootstrap.Modal(document.getElementById('maintenanceModal'));
+    const title = document.getElementById('maintenanceModalLabel');
+    const idField = document.getElementById('maintenanceId');
+    const equipField = document.getElementById('maintenanceEquipmentId');
+    const startField = document.getElementById('maintenanceStart');
+    const endField = document.getElementById('maintenanceEnd');
+    const typeField = document.getElementById('maintenanceType');
+    const costField = document.getElementById('maintenanceCost');
+
+    // Загружаем список техники, если он пуст
+    if (allEquipmentForMaintenance.length === 0) {
+        fetchAPI('equipment').then(data => {
+            allEquipmentForMaintenance = data;
+            // перезаполняем select
+            const select = document.getElementById('maintenanceEquipmentId');
+            if (select) {
+                select.innerHTML = '<option value="">Выберите технику</option>';
+                data.forEach(e => {
+                    const opt = document.createElement('option');
+                    opt.value = e.id;
+                    opt.text = `${e.name} (ID: ${e.id})`;
+                    select.appendChild(opt);
+                });
+            }
+        });
+    }
+
+    if (maintenance) {
+        title.textContent = 'Редактирование ТО';
+        idField.value = maintenance.id;
+        equipField.value = maintenance.equipmentId;
+        // форматируем даты для datetime-local
+        startField.value = new Date(maintenance.startDate).toISOString().slice(0, 16);
+        endField.value = new Date(maintenance.endDate).toISOString().slice(0, 16);
+        typeField.value = maintenance.type;
+        costField.value = maintenance.cost;
+    } else {
+        title.textContent = 'Добавление ТО';
+        idField.value = 0;
+        document.getElementById('maintenanceForm').reset();
+    }
+    modal.show();
+}
+
+function hideMaintenanceForm() {
+    bootstrap.Modal.getInstance(document.getElementById('maintenanceModal')).hide();
+}
+
+const maintenanceForm = document.getElementById('maintenanceForm');
+if (maintenanceForm) {
+    maintenanceForm.removeEventListener('submit', maintenanceForm._listener);
+    maintenanceForm._listener = async function (e) {
+        e.preventDefault();
+        const id = parseInt(document.getElementById('maintenanceId').value);
+        const data = {
+            equipmentId: parseInt(document.getElementById('maintenanceEquipmentId').value),
+            startDate: new Date(document.getElementById('maintenanceStart').value).toISOString(),
+            endDate: new Date(document.getElementById('maintenanceEnd').value).toISOString(),
+            type: document.getElementById('maintenanceType').value,
+            cost: parseFloat(document.getElementById('maintenanceCost').value)
+        };
+        if (!data.equipmentId || !data.startDate || !data.endDate || isNaN(data.cost)) {
+            alert('Заполните все обязательные поля');
+            return;
+        }
+        try {
+            if (id === 0) {
+                await fetchAPI('maintenances', { method: 'POST', body: JSON.stringify(data) });
+            } else {
+                await fetchAPI(`maintenances/${id}`, { method: 'PUT', body: JSON.stringify({ ...data, id }) });
+            }
+            hideMaintenanceForm();
+            loadMaintenances();
+        } catch (err) {
+            alert('Ошибка сохранения: ' + err.message);
+        }
+    };
+    maintenanceForm.addEventListener('submit', maintenanceForm._listener);
+}
+
+async function editMaintenance(id) {
+    try {
+        const maintenance = await fetchAPI(`maintenances/${id}`);
+        showMaintenanceForm(maintenance);
+    } catch (err) {
+        alert('Ошибка загрузки ТО: ' + err.message);
+    }
+}
+
+async function deleteMaintenance(id) {
+    if (!confirm('Удалить запись ТО?')) return;
+    try {
+        await fetchAPI(`maintenances/${id}`, { method: 'DELETE' });
+        loadMaintenances();
+    } catch (err) {
+        alert('Ошибка удаления: ' + err.message);
+    }
+}
+
+// ============================================================
+// 12. Инициализация
 // ============================================================
 document.addEventListener('DOMContentLoaded', function () {
     currentPageName = getCurrentPage();

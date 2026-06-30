@@ -1,4 +1,4 @@
-﻿﻿
+﻿﻿﻿﻿
 <!DOCTYPE html>
 <html lang="ru">
 <head>
@@ -40,6 +40,7 @@
                 <li class="nav-item admin-tab"><a class="nav-link" href="clients.html">Клиенты</a></li>
                 <li class="nav-item admin-tab"><a class="nav-link active" href="equipment.html">Техника</a></li>
                 <li class="nav-item admin-tab"><a class="nav-link" href="rentals.html">Бронирования</a></li>
+                <li class="nav-item admin-tab"><a class="nav-link" href="maintenances.html">ТО</a></li>
             </ul>
         </div>
 
@@ -88,7 +89,13 @@
                     <form id="equipmentForm">
                         <input type="hidden" id="equipmentId" value="0">
                         <div class="mb-2"><label>Название</label><input type="text" id="equipmentName" class="form-control" required></div>
-                        <div class="mb-2"><label>Тип (ID)</label><input type="number" id="equipmentTypeId" class="form-control" required></div>
+                        <!-- ТИП – ТЕПЕРЬ ВЫПАДАЮЩИЙ СПИСОК -->
+                        <div class="mb-2">
+                            <label>Тип</label>
+                            <select id="equipmentTypeId" class="form-select" required>
+                                <option value="">Выберите тип</option>
+                            </select>
+                        </div>
                         <div class="mb-2"><label>Год выпуска</label><input type="number" id="equipmentYear" class="form-control" required></div>
                         <div class="mb-2"><label>Стоимость аренды (час)</label><input type="number" step="0.01" id="equipmentRate" class="form-control" required></div>
                         <div class="mb-2">
@@ -99,6 +106,10 @@
                                 <option value="на обслуживании">На обслуживании</option>
                             </select>
                         </div>
+                        <div class="mb-2">
+                            <label>Дата последнего ТО</label>
+                            <input type="date" id="equipmentLastMaintenanceDate" class="form-control">
+                        </div>
                         <button type="submit" class="btn btn-success">Сохранить</button>
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
                     </form>
@@ -108,65 +119,11 @@
     </div>
 
     <!-- МОДАЛКИ ДЛЯ АВТОРИЗАЦИИ И ДЕТАЛЕЙ -->
-    <div class="modal fade" id="authModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="authModalLabel">Вход</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="authForm">
-                        <div class="mb-2">
-                            <span id="authToggle" onclick="toggleAuthMode()">Нет аккаунта? Зарегистрироваться</span>
-                        </div>
-                        <div class="mb-2"><label>Имя пользователя</label><input type="text" id="authUsername" class="form-control" required></div>
-                        <div class="mb-2"><label>Пароль</label><input type="password" id="authPassword" class="form-control" required></div>
-                        <div id="registerFields" style="display:none;">
-                            <div class="mb-2"><label>Полное имя</label><input type="text" id="authName" class="form-control"></div>
-                            <div class="mb-2"><label>Телефон</label><input type="text" id="authPhone" class="form-control"></div>
-                            <div class="mb-2"><label>Email</label><input type="email" id="authEmail" class="form-control"></div>
-                        </div>
-                        <button type="submit" class="btn btn-primary w-100">Войти</button>
-                    </form>
-                </div>
-            </div>
-        </div>
-    </div>
+    <div class="modal fade" id="authModal" tabindex="-1" aria-hidden="true">...</div>
+    <div class="modal fade" id="equipmentModal" tabindex="-1" aria-hidden="true">...</div>
 
-    <div class="modal fade" id="equipmentModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="equipmentModalLabel">Детали техники</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body" id="equipmentModalBody"></div>
-            </div>
-        </div>
-    </div>
-
-    <footer class="footer">
-        <div class="container-custom">
-            <div class="row">
-                <div class="col-md-4">
-                    <h5>RentTech</h5>
-                    <p>Сервис аренды спецтехники. Более 100 единиц техники в наличии.</p>
-                </div>
-                <div class="col-md-4">
-                    <h5>Контакты</h5>
-                    <p><i class="fas fa-phone-alt"></i> +7 (800) 123-45-67</p>
-                    <p><i class="fas fa-envelope"></i> info@renttech.ru</p>
-                </div>
-                <div class="col-md-4">
-                    <h5>Ссылки</h5>
-                    <p><a href="#">О нас</a></p>
-                    <p><a href="#">Как арендовать</a></p>
-                </div>
-            </div>
-            <div class="copyright">&copy; 2026 RentTech</div>
-        </div>
-    </footer>
+    <!-- ФУТЕР -->
+    <footer class="footer">...</footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="app.js"></script>

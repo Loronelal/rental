@@ -25,6 +25,8 @@ public class Equipment
     [Column("owner_id")]
     public int? OwnerId { get; set; }   // сделано nullable
 
+    [Column("last_maintenance_date")]
+    public DateTime? LastMaintenanceDate { get; set; }
     public Client? Owner { get; set; }   // nullable
 
     public EquipmentType? Type { get; set; } = null!;
