@@ -1,21 +1,20 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
 
-COPY ["rental/rental.csproj", "./"]
+# Копируем всё содержимое репозитория (включая папки rental, rental.AppHost, rental.ServiceDefaults)
+COPY . .
+
+# Восстанавливаем зависимости для всего решения
 RUN dotnet restore
 
-COPY rental/ .
-RUN dotnet publish -c Release -o /app/publish
+# Публикуем основной проект (rental/rental.csproj)
+RUN dotnet publish rental/rental.csproj -c Release -o /app/publish
 
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
 WORKDIR /app
 
+# Копируем собранное приложение (включая wwwroot)
 COPY --from=build /app/publish .
-
-COPY rental/*.html ./
-COPY rental/*.css ./
-COPY rental/*.js ./
-COPY rental/images ./images
 
 EXPOSE 80
 ENV ASPNETCORE_URLS=http://+:80
