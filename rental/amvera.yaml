@@ -1,0 +1,12 @@
+﻿meta:
+  environment: docker
+  toolchain:
+    name: docker
+
+build:
+  dockerfile: Dockerfile   # путь к вашему Dockerfile
+
+run:
+  containerPort: 80        # приложение слушает порт 80 (как в Dockerfile)
+  # Если нужно постоянное хранилище для файлов (не для БД) – раскомментируйте:
+  # persistenceMount: /app/data
