@@ -1,0 +1,8 @@
+# Use this workspace to collaborate
+workspace:
+  id: 99917ce2-6bd7-45cc-856a-7e5c43b894fc
+
+localResources:
+  specs:
+    - ..\rental\obj\Debug\net8.0\EndpointInfo\rental.json
+    - ..\rental\obj\Debug\net9.0\EndpointInfo\rental.json
