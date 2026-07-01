@@ -4,7 +4,7 @@
     name: docker
 
 build:
-  dockerfile: rental/Dockerfile   # если Dockerfile лежит внутри rental/
+  dockerfile: Dockerfile   # если Dockerfile лежит внутри rental/
 
 run:
   containerPort: 80        # приложение слушает порт 80 (как в Dockerfile)

@@ -4,6 +4,7 @@ WORKDIR /src
 
 # Копируем csproj из подпапки rental/
 COPY ["rental/rental.csproj", "./"]
+COPY rental/ .   # вместо COPY . .
 RUN dotnet restore
 
 # Копируем все остальные файлы из подпапки rental/
