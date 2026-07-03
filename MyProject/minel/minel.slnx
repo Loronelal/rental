@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="minel/minel.csproj" Id="070c7926-0c2d-4a4e-b0ae-db7c3f4f2d45" />
+  <Project Path="minel_console/minel_console.csproj" Id="b4d5e6f7-a8b9-0123-def0-123456789013" />
+  <Project Path="minel_tests/minel_tests.csproj" Id="d4e5f6a7-b8c9-0123-def1-234567890123" />
+</Solution>

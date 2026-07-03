@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="dijkstra/dijkstra.csproj" Id="c906f396-6cbb-41db-bf33-71a23638c82c" />
+  <Project Path="dijkstra_console/dijkstra_console.csproj" Id="b1a2b3c4-d5e6-7890-abcd-ef1234567890" />
+  <Project Path="dijkstra_tests/dijkstra_tests.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" />
+</Solution>

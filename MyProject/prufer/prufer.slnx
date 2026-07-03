@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="prufer/prufer.csproj" Id="a05eea2f-2ad7-412b-aa4d-5da137b369e6" />
+  <Project Path="prufer_console/prufer_console.csproj" Id="b2b3c4d5-e6f7-8901-bcde-f12345678901" />
+  <Project Path="prufer_tests/prufer_tests.csproj" Id="b2c3d4e5-f6a7-8901-bcde-f12345678901" />
+</Solution>
